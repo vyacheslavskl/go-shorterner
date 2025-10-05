@@ -8,13 +8,13 @@ import (
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 )
 
-const localHostUrl = "http://localhost:8080/"
+const localHostURL = "http://localhost:8080/"
 
 func PostRoot(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet {
-		fUrl := r.URL.Path
-		res, ok := repository.Repo[fUrl[1:]]
+		fURL := r.URL.Path
+		res, ok := repository.Repo[fURL[1:]]
 		if ok {
 			w.Header().Add("Location", res)
 			w.WriteHeader(http.StatusTemporaryRedirect)
@@ -33,7 +33,7 @@ func PostRoot(w http.ResponseWriter, r *http.Request) {
 
 		url, _ := io.ReadAll(r.Body)
 
-		response := localHostUrl + service.Short(string(url))
+		response := localHostURL + service.Short(string(url))
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusCreated)

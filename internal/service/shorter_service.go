@@ -16,13 +16,13 @@ func generateShort(url string) string {
 }
 
 func Short(u string) string {
-	result_hash := generateShort(u)
-	_, ok := repository.Repo[result_hash]
+	resultHash := generateShort(u)
+	_, ok := repository.Repo[resultHash]
 
 	if ok {
-		return result_hash
+		return resultHash
 	}
-	repository.Repo[result_hash] = u
+	repository.Repo[resultHash] = u
 
-	return result_hash
+	return resultHash
 }
