@@ -9,7 +9,7 @@ import (
 )
 
 func TestHander(t *testing.T) {
-	cases := []struct {
+	tests := []struct {
 		name         string
 		method       string
 		contentType  string
@@ -35,9 +35,16 @@ func TestHander(t *testing.T) {
 			url:          "/06509a58",
 			body:         nil,
 			expectedCode: http.StatusTemporaryRedirect},
+		{name: "simple GET empty Url",
+			method:       http.MethodGet,
+			contentType:  "text/plain",
+			url:          "/",
+			body:         nil,
+			expectedCode: http.StatusBadRequest},
+	
 	}
 
-	for _, tc := range cases {
+	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
