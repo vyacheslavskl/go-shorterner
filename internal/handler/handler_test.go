@@ -16,7 +16,8 @@ func TestHander(t *testing.T) {
 		url          string
 		body         io.Reader
 		expectedCode int
-	}{{name: "wrong method PUT",
+	}{
+		{name: "wrong method PUT",
 		method:       http.MethodPut,
 		url:          "/",
 		contentType:  "text/plain",
@@ -41,7 +42,6 @@ func TestHander(t *testing.T) {
 			url:          "/",
 			body:         nil,
 			expectedCode: http.StatusBadRequest},
-	
 	}
 
 	for _, tc := range tests {
@@ -53,9 +53,18 @@ func TestHander(t *testing.T) {
 
 			res := w.Result()
 			defer res.Body.Close()
+			resBody, err := io.ReadAll(res.Body)
 
 			if res.StatusCode != tc.expectedCode {
 				t.Errorf("Result = %v, want %v", res.StatusCode, tc.expectedCode)
+			}
+
+			if tc.method == http.MethodPost && resBody == nil {
+				t.Errorf("Body is not empty = %v", string(resBody))
+			}
+
+			if tc.method == http.MethodPost && err != nil {
+				t.Errorf("Err is not nil = %v", err)
 			}
 
 		})
