@@ -50,10 +50,12 @@ func TestHander(t *testing.T) {
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()
 			PostRoot(w, r)
-			defer r.Body.Close()
 
-			if w.Result().StatusCode != tc.expectedCode {
-				t.Errorf("Result = %v, want %v", w.Result().StatusCode, tc.expectedCode)
+			res := w.Result()
+			defer res.Body.Close()
+
+			if res.StatusCode != tc.expectedCode {
+				t.Errorf("Result = %v, want %v", res.StatusCode, tc.expectedCode)
 			}
 
 		})
