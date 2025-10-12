@@ -52,6 +52,7 @@ func TestHander(t *testing.T) {
 			PostRoot(w, r)
 
 			if w.Result().StatusCode != tc.expectedCode {
+				defer r.Body.Close()
 				t.Errorf("Result = %v, want %v", w.Result().StatusCode, tc.expectedCode)
 			}
 
