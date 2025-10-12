@@ -7,7 +7,6 @@ import (
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 )
 
-
 func generateShort(url string) string {
 	hasher := md5.New()
 	hasher.Write([]byte(url))

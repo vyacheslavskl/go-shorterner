@@ -18,11 +18,11 @@ func TestHander(t *testing.T) {
 		expectedCode int
 	}{
 		{name: "wrong method PUT",
-		method:       http.MethodPut,
-		url:          "/",
-		contentType:  "text/plain",
-		body:         nil,
-		expectedCode: http.StatusBadRequest},
+			method:       http.MethodPut,
+			url:          "/",
+			contentType:  "text/plain",
+			body:         nil,
+			expectedCode: http.StatusBadRequest},
 		{name: "simple POST",
 			method:       http.MethodPost,
 			contentType:  "text/plain",

@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 )
@@ -31,8 +32,8 @@ func PostRoot(w http.ResponseWriter, r *http.Request) {
 	} else {
 
 		url, _ := io.ReadAll(r.Body)
-
-		response := localHostURL + service.Short(string(url))
+		cfg := config.GetConfig().RedirectAddress
+		response := cfg.String() + ":" + service.Short(string(url))
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusCreated)
