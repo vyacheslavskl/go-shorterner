@@ -1,6 +1,7 @@
 package app
 
 import (
+	"flag"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -13,22 +14,22 @@ type App struct {
 	config *config.Config
 }
 
-func New() *App {
+func Run() error {
 
-	cfg := config.GetConfig()
+	addr := new(config.Config)
+	flag.Var(&addr.Address, "a", "Net address host:port")
+	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
+	flag.Parse()
+
+	cfg := config.GetConfig(addr)
 
 	app := &App{routes: chi.NewMux(), config: cfg}
 
-	app.routes.Get("/", handler.PostRoot)
-	app.routes.Get("/{id}", handler.PostRoot)
-	app.routes.Post("/", handler.PostRoot)
+	app.routes.Get("/", handler.PostRootHandler(cfg))
+	app.routes.Get("/{id}", handler.PostRootHandler(cfg))
+	app.routes.Post("/", handler.PostRootHandler(cfg))
 
-	return app
-}
-
-func (a *App) Run() error {
-
-	err := http.ListenAndServe(a.config.Address.String(), a.routes)
+	err := http.ListenAndServe(app.config.Address.String(), app.routes)
 	if err != nil {
 		return err
 	}

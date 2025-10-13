@@ -9,34 +9,33 @@ import (
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 )
 
-const localHostURL = "http://localhost:8080/"
+func PostRootHandler(cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			fURL := r.URL.Path
+			res, ok := repository.Repo[fURL[1:]]
+			if ok && res != "" {
+				w.Header().Add("Location", res)
+				w.WriteHeader(http.StatusTemporaryRedirect)
+			} else {
+				w.WriteHeader(http.StatusBadRequest)
+			}
 
-func PostRoot(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		fURL := r.URL.Path
-		res, ok := repository.Repo[fURL[1:]]
-		if ok && res != "" {
-			w.Header().Add("Location", res)
-			w.WriteHeader(http.StatusTemporaryRedirect)
-		} else {
+			return
+		} else if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		} else if r.Header.Get("Content-Type") != "text/plain" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		} else {
+
+			url, _ := io.ReadAll(r.Body)
+			response := cfg.RedirectAddress.String() + "/" + service.Short(string(url))
+
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(response))
 		}
-
-		return
-	} else if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	} else if r.Header.Get("Content-Type") != "text/plain" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	} else {
-
-		url, _ := io.ReadAll(r.Body)
-		cfg := config.GetConfig().RedirectAddress
-		response := cfg.String() + ":" + service.Short(string(url))
-
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(response))
 	}
 }

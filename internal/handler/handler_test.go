@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/vyacheslavskl/go-shorterner/internal/config"
 )
 
 func TestHander(t *testing.T) {
@@ -45,11 +47,15 @@ func TestHander(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		cfg := new(config.Config)
 		t.Run(tc.name, func(t *testing.T) {
+
+			handler := PostRootHandler(cfg)
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()
-			PostRoot(w, r)
+
+			handler.ServeHTTP(w, r)
 
 			res := w.Result()
 			defer res.Body.Close()
