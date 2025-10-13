@@ -18,8 +18,8 @@ func Run() error {
 
 	addr := &config.Config{
 		Address:         config.NetAddress{Host: "localhost", Port: 8080},
-		RedirectAddress: config.NetAddress{Host: "localhost", Port: 8080}}
-		
+		RedirectAddress: config.NetAddress{Host: "http://localhost", Port: 8080}}
+
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
 	flag.Parse()
