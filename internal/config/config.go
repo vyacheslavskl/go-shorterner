@@ -23,7 +23,7 @@ func (n NetAddress) String() string {
 func (n *NetAddress) Set(flagValue string) error {
 	res := strings.Split(flagValue, ":")
 	if len(res) == 3 {
-		n.Protocol = res[0]
+		n.Protocol = res[0] + ":"
 		n.Host = res[1]
 		port, err := strconv.Atoi(res[2])
 		if err != nil {
