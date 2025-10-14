@@ -6,8 +6,9 @@ import (
 )
 
 type NetAddress struct {
-	Host string
-	Port int
+	Protocol string
+	Host     string
+	Port     int
 }
 
 type Config struct {
@@ -16,16 +17,30 @@ type Config struct {
 }
 
 func (n NetAddress) String() string {
-	return n.Host + ":" + strconv.Itoa(n.Port)
+	return n.Protocol + n.Host + ":" + strconv.Itoa(n.Port)
 }
 
 func (n *NetAddress) Set(flagValue string) error {
 	res := strings.Split(flagValue, ":")
-	n.Host = res[0]
-	port, err := strconv.Atoi(res[1])
-	n.Port = port
+	if len(res) == 3 {
+		n.Protocol = res[0]
+		n.Host = res[1]
+		port, err := strconv.Atoi(res[2])
+		if err != nil {
+			return err
+		}
+		n.Port = port
+	} else {
+		n.Host = res[0]
+		port, err := strconv.Atoi(res[1])
+		if err != nil {
+			return err
+		}
+		n.Port = port
+		n.Port = port
 
-	return err
+	}
+	return nil
 }
 
 func GetConfig(c *Config) *Config {
