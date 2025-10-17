@@ -23,9 +23,9 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
-	r.Get("/", h.GetRootLink) // GET /items
-	r.Post("/", h.PostLink)   // POST /items
-	r.Get("/{id}", h.GetLink) // GET /items/:id
+	r.Get("/", h.GetRootLink) 
+	r.Post("/", h.PostLink)   
+	r.Get("/{id}", h.GetLink) 
 
 	return r
 }
@@ -36,7 +36,6 @@ func (h *ShorterHandler) GetRootLink(w http.ResponseWriter, r *http.Request) {
 
 func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
 	fURL := r.URL.Path
-	// res, ok := repository.Repo[fURL[1:]]
 	res, ok := h.srv.GetLink(fURL[1:])
 	if ok && res != "" {
 		w.Header().Add("Location", res)
@@ -53,8 +52,8 @@ func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortUrl := h.srv.SaveUrl(string(url))
-	response := h.cfg.RedirectAddress.String() + "/" + shortUrl
+	shortURL := h.srv.SaveURL(string(url))
+	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)

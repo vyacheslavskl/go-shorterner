@@ -15,12 +15,12 @@ func NewService(repo repository.Repository) *ShortServerice {
 	return &ShortServerice{repo: repo}
 }
 
-func (s *ShortServerice) PutLink(url, shortUrl string) {
-	s.repo.PutLink(url, shortUrl)
+func (s *ShortServerice) PutLink(url, shortURL string) {
+	s.repo.PutLink(url, shortURL)
 }
 
-func (s *ShortServerice) GetLink(shortUrl string) (string, bool) {
-	return s.repo.GetLink(shortUrl)
+func (s *ShortServerice) GetLink(shortURL string) (string, bool) {
+	return s.repo.GetLink(shortURL)
 }
 
 func generateShort(url string) string {
@@ -30,15 +30,9 @@ func generateShort(url string) string {
 	return result[:8] // Берем первые 8 символов
 }
 
-func (s *ShortServerice) SaveUrl(u string) string {
+func (s *ShortServerice) SaveURL(u string) string {
 	resultHash := generateShort(u)
 	s.repo.PutLink(u, resultHash)
-	// _, ok := repository.Repo[resultHash]
-
-	// if ok {
-	// 	return resultHash
-	// }
-	// repository.Repo[resultHash] = u
 
 	return resultHash
 }
