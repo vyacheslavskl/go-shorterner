@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
+	"github.com/vyacheslavskl/go-shorterner/internal/repository"
+	"github.com/vyacheslavskl/go-shorterner/internal/service"
 )
 
 func TestHander(t *testing.T) {
@@ -24,7 +26,7 @@ func TestHander(t *testing.T) {
 			url:          "/",
 			contentType:  "text/plain",
 			body:         nil,
-			expectedCode: http.StatusBadRequest},
+			expectedCode: http.StatusMethodNotAllowed},
 		{name: "simple POST",
 			method:       http.MethodPost,
 			contentType:  "text/plain",
@@ -46,11 +48,12 @@ func TestHander(t *testing.T) {
 			expectedCode: http.StatusBadRequest},
 	}
 
+	cfg := new(config.Config)
+	repo := repository.NewMapRepo()
+	srv := service.NewService(repo)
 	for _, tc := range tests {
-		cfg := new(config.Config)
 		t.Run(tc.name, func(t *testing.T) {
-
-			handler := PostRootHandler(cfg)
+			handler := NewShorterHandler(cfg, srv).Routes()
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()

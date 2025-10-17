@@ -4,38 +4,59 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
-	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 )
 
-func PostRootHandler(cfg *config.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			fURL := r.URL.Path
-			res, ok := repository.Repo[fURL[1:]]
-			if ok && res != "" {
-				w.Header().Add("Location", res)
-				w.WriteHeader(http.StatusTemporaryRedirect)
-			} else {
-				w.WriteHeader(http.StatusBadRequest)
-			}
+type ShorterHandler struct {
+	cfg *config.Config
+	srv *service.ShortServerice
+}
 
-			return
-		} else if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		} else if r.Header.Get("Content-Type") != "text/plain" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		} else {
+func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice) *ShorterHandler {
+	return &ShorterHandler{cfg: cfg, srv: srv}
+}
 
-			url, _ := io.ReadAll(r.Body)
-			response := cfg.RedirectAddress.String() + "/" + service.Short(string(url))
+func (h *ShorterHandler) Routes() http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
 
-			w.Header().Set("Content-Type", "text/plain")
-			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte(response))
-		}
+	r.Get("/", h.GetRootLink) // GET /items
+	r.Post("/", h.PostLink)   // POST /items
+	r.Get("/{id}", h.GetLink) // GET /items/:id
+
+	return r
+}
+
+func (h *ShorterHandler) GetRootLink(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusBadRequest)
+}
+
+func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
+	fURL := r.URL.Path
+	// res, ok := repository.Repo[fURL[1:]]
+	res, ok := h.srv.GetLink(fURL[1:])
+	if ok && res != "" {
+		w.Header().Add("Location", res)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	} else {
+		w.WriteHeader(http.StatusBadRequest)
 	}
+}
+
+func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
+	url, err := io.ReadAll(r.Body)
+	if err != nil || string(url) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	shortUrl := h.srv.SaveUrl(string(url))
+	response := h.cfg.RedirectAddress.String() + "/" + shortUrl
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(response))
 }

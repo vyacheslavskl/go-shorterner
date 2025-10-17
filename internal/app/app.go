@@ -4,18 +4,13 @@ import (
 	"flag"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
+	"github.com/vyacheslavskl/go-shorterner/internal/repository"
+	"github.com/vyacheslavskl/go-shorterner/internal/service"
 )
 
-type App struct {
-	routes *chi.Mux
-	config *config.Config
-}
-
 func Run() error {
-
 	addr := &config.Config{
 		Address:         config.NetAddress{Protocol: "", Host: "localhost", Port: 8080},
 		RedirectAddress: config.NetAddress{Protocol: "http://", Host: "localhost", Port: 8080}}
@@ -25,14 +20,12 @@ func Run() error {
 	flag.Parse()
 
 	cfg := config.GetConfig(addr)
+	repo := repository.NewMapRepo()
+	srv := service.NewService(repo)
 
-	app := &App{routes: chi.NewMux(), config: cfg}
+	handler := handler.NewShorterHandler(cfg, srv)
 
-	app.routes.Get("/", handler.PostRootHandler(cfg))
-	app.routes.Get("/{id}", handler.PostRootHandler(cfg))
-	app.routes.Post("/", handler.PostRootHandler(cfg))
-
-	err := http.ListenAndServe(app.config.Address.String(), app.routes)
+	err := http.ListenAndServe(cfg.Address.String(), handler.Routes())
 	if err != nil {
 		return err
 	}
