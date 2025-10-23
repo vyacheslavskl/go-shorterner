@@ -23,9 +23,9 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
-	r.Get("/", h.GetRootLink) 
-	r.Post("/", h.PostLink)   
-	r.Get("/{id}", h.GetLink) 
+	r.Get("/", h.GetRootLink)
+	r.Post("/", h.PostLink)
+	r.Get("/{id}", h.GetLink)
 
 	return r
 }
