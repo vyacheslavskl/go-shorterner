@@ -17,14 +17,14 @@ func Run() error {
 		RedirectAddress: config.NetAddress{Protocol: "http://", Host: "localhost", Port: 8080},
 	}
 
-	ser_adr := os.Getenv("SERVER_ADDRESS")
-	if ser_adr != "" {
-		_ = addr.Address.Set(ser_adr)
+	serAdr := os.Getenv("SERVER_ADDRESS")
+	if serAdr != "" {
+		_ = addr.Address.Set(serAdr)
 	}
 
-	bas_adr := os.Getenv("BASE_URL")
-	if bas_adr != "" {
-		_ = addr.RedirectAddress.Set(ser_adr)
+	basAdr := os.Getenv("BASE_URL")
+	if basAdr != "" {
+		_ = addr.RedirectAddress.Set(basAdr)
 	}
 
 	flag.Var(&addr.Address, "a", "Net address host:port")
