@@ -25,9 +25,9 @@ func (r *responseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
-func (rw *responseWriter) WriteHeader(statusCode int) {
-	rw.responseData.status = statusCode
-	rw.ResponseWriter.WriteHeader(statusCode)
+func (r *responseWriter) WriteHeader(statusCode int) {
+	r.responseData.status = statusCode
+	r.ResponseWriter.WriteHeader(statusCode)
 }
 
 func WithLogging(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
