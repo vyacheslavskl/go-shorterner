@@ -10,6 +10,7 @@ import (
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
+	"go.uber.org/zap"
 )
 
 func TestHander(t *testing.T) {
@@ -51,9 +52,15 @@ func TestHander(t *testing.T) {
 	cfg := new(config.Config)
 	repo := repository.NewMapRepo()
 	srv := service.NewService(repo)
+	logger, e := zap.NewDevelopment()
+	if e != nil {
+		panic(e)
+	}
+	sugar := logger.Sugar()
+	defer logger.Sync()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := NewShorterHandler(cfg, srv).Routes()
+			handler := NewShorterHandler(cfg, srv, sugar).Routes()
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()
