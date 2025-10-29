@@ -28,6 +28,8 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r.Post("/", h.PostLink)
 	r.Get("/{id}", h.GetLink)
 
+	r.NotFound(h.GetRootLink)
+
 	return r
 }
 
