@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"compress/gzip"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -51,7 +53,45 @@ func WithLogging(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 				"status", lw.responseData.status,
 				"duration", duration,
 				"size", lw.responseData.size,
+				"content_type", r.Header.Get("Content-Type"),
 			)
 		})
 	}
+}
+
+// curl.exe -i -X  POST http://localhost:8080/api/shorten -H "Content-Type: application/json" -H "Content-Encoding: gzip" -H "Accept-Encoding: gzip" -d '{\"url\": \"https://practicum.yandex.ru\"}'
+// curl.exe -i -X  POST http://localhost:8080 -H "Content-Type: text/plain" -H "Content-Encoding: gzip" -H "Accept-Encoding: gzip" -d "ggg.rrr"
+func WithGzipCompression(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			h.ServeHTTP(w, r)
+			return
+		}
+
+		switch r.Header.Get("Content-Type") {
+		case "application/json", "text/html":
+			gz := gzip.NewWriter(w)
+			defer gz.Close()
+
+			w.Header().Set("Content-Encoding", "gzip")
+
+			gzw := gzipResponseWriter{
+				ResponseWriter: w,
+				Writer:         gz,
+			}
+			h.ServeHTTP(gzw, r)
+		default:
+			h.ServeHTTP(w, r)
+			return
+		}
+	})
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	Writer *gzip.Writer
+}
+
+func (gzw gzipResponseWriter) Write(data []byte) (int, error) {
+	return gzw.Writer.Write(data)
 }
