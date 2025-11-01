@@ -47,6 +47,18 @@ func TestHander(t *testing.T) {
 			url:          "/",
 			body:         nil,
 			expectedCode: http.StatusBadRequest},
+		{name: "POST to api/shorten JSON",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			url:          "/api/shorten",
+			body:         strings.NewReader(`{"url":"http://practicum.yandex.ru"}`),
+			expectedCode: http.StatusCreated},
+		{name: "POST to api/shorten JSON wrong content",
+			method:       http.MethodPost,
+			contentType:  "text/plain",
+			url:          "/api/shorten",
+			body:         strings.NewReader(`{"url":"http://practicum.yandex.ru"}`),
+			expectedCode: http.StatusBadRequest},
 	}
 
 	cfg := new(config.Config)
