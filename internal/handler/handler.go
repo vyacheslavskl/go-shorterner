@@ -29,7 +29,7 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r.Get("/", h.GetRootLink)
 	r.Post("/", h.PostLink)
 	r.Get("/{id}", h.GetLink)
-	r.Post("/api/shorten", h.PostApiShorten)
+	r.Post("/api/shorten", h.PostAPIShorten)
 
 	r.NotFound(h.GetRootLink)
 
@@ -66,9 +66,8 @@ func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(response))
 }
 
-func (h *ShorterHandler) PostApiShorten(w http.ResponseWriter, r *http.Request) {
+func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) {
 	// curl.exe -i -X  POST http://localhost:8080/api/shorten -H "Content-Type: application/json" -d '{\"url\": \"https://practicum.yandex.ru\"}'
-
 	if r.Header.Get("Content-Type") != "application/json" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -81,7 +80,7 @@ func (h *ShorterHandler) PostApiShorten(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	shortURL := h.srv.SaveURL(req.Url)
+	shortURL := h.srv.SaveURL(req.URL)
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 
 	resp := models.Response{Result: response}
@@ -93,5 +92,4 @@ func (h *ShorterHandler) PostApiShorten(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
 }
