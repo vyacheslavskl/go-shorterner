@@ -16,6 +16,10 @@ func NewMapRepo() *MapRepo {
 	return &MapRepo{data: make(map[string]string)}
 }
 
+func NewStorageRepo(data map[string]string) *MapRepo {
+	return &MapRepo{data: data}
+}
+
 func (r *MapRepo) PutLink(url, shortURL string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -27,4 +31,12 @@ func (r *MapRepo) GetLink(shortURL string) (string, bool) {
 	defer r.mu.RUnlock()
 	val, err := r.data[shortURL]
 	return val, err
+}
+
+func (r *MapRepo) StoreData() map[string]string {
+	return r.data
+}
+
+func (r *MapRepo) LoadData() *map[string]string {
+	return &r.data
 }
