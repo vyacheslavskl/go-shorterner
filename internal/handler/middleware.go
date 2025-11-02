@@ -65,6 +65,8 @@ func WithLogging(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 				"duration", duration,
 				"size", lw.responseData.size,
 				"content_type", r.Header.Get("Content-Type"),
+				"content_encoding", r.Header.Get("Content-Encoding"),
+				"accept_encoding", r.Header.Get("Accept-Encoding"),
 			)
 		})
 	}
@@ -139,7 +141,7 @@ func GzipMiddlware(h http.Handler) http.Handler {
 		if sendsGzip && (contentType == "application/json" || contentType == "text/html") {
 			cr, err := newCompressReader(r.Body)
 			if err != nil {
-				w.WriteHeader(http.StatusNotExtended)
+				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 			r.Body = cr
