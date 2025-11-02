@@ -24,9 +24,9 @@ func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap
 
 func (h *ShorterHandler) Routes() http.Handler {
 	r := chi.NewRouter()
-
-	r.Use(WithLogging(h.log))
 	r.Use(GzipMiddlware)
+	r.Use(WithLogging(h.log))
+
 	r.Get("/", h.GetRootLink)
 	r.Post("/", h.PostLink)
 	r.Get("/{id}", h.GetLink)

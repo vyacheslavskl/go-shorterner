@@ -67,6 +67,7 @@ func WithLogging(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 				"content_type", r.Header.Get("Content-Type"),
 				"content_encoding", r.Header.Get("Content-Encoding"),
 				"accept_encoding", r.Header.Get("Accept-Encoding"),
+				"response_header", lw.ResponseWriter.Header(),
 			)
 		})
 	}
@@ -74,6 +75,7 @@ func WithLogging(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 
 // curl.exe -i -X  POST http://localhost:8080/api/shorten -H "Content-Type: application/json" -H "Content-Encoding: gzip" -H "Accept-Encoding: gzip" -d '{\"url\": \"https://practicum.yandex.ru\"}'
 // curl.exe -i -X  POST http://localhost:8080 -H "Content-Type: text/plain" -H "Content-Encoding: gzip" -H "Accept-Encoding: gzip" -d "ggg.rrr"
+// curl.exe -i -X  POST http://localhost:8080 -H "Content-Type: text/plain" -H "Content-Encoding: gzip" -H "Accept-Encoding: gzip" -d "ya.rrr"
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
 	return &compressWriter{
 		w:  w,
@@ -130,7 +132,7 @@ func GzipMiddlware(h http.Handler) http.Handler {
 		acceptEncoding := r.Header.Get("Accept-Encoding")
 		supportsGzip := strings.Contains(acceptEncoding, "gzip")
 		contentType := r.Header.Get("Content-Type")
-		if supportsGzip && (contentType == "application/json" || contentType == "text/html") {
+		if supportsGzip && (contentType == "application/json" || contentType == "text/html")  {
 			cw := newCompressWriter(w)
 			ow = cw
 			defer cw.Close()
