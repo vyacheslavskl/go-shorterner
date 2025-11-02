@@ -10,6 +10,7 @@ import (
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
+	"go.uber.org/zap"
 )
 
 func TestHander(t *testing.T) {
@@ -46,14 +47,32 @@ func TestHander(t *testing.T) {
 			url:          "/",
 			body:         nil,
 			expectedCode: http.StatusBadRequest},
+		{name: "POST to api/shorten JSON",
+			method:       http.MethodPost,
+			contentType:  "application/json",
+			url:          "/api/shorten",
+			body:         strings.NewReader(`{"url":"http://practicum.yandex.ru"}`),
+			expectedCode: http.StatusCreated},
+		{name: "POST to api/shorten JSON wrong content",
+			method:       http.MethodPost,
+			contentType:  "text/plain",
+			url:          "/api/shorten",
+			body:         strings.NewReader(`{"url":"http://practicum.yandex.ru"}`),
+			expectedCode: http.StatusBadRequest},
 	}
 
 	cfg := new(config.Config)
 	repo := repository.NewMapRepo()
 	srv := service.NewService(repo)
+	logger, e := zap.NewDevelopment()
+	if e != nil {
+		panic(e)
+	}
+	sugar := logger.Sugar()
+	defer logger.Sync()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := NewShorterHandler(cfg, srv).Routes()
+			handler := NewShorterHandler(cfg, srv, sugar).Routes()
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()
