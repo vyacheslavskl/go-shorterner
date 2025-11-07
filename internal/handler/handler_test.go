@@ -62,7 +62,7 @@ func TestHander(t *testing.T) {
 	}
 
 	cfg := new(config.Config)
-	repo := repository.NewMapRepo()
+	repo, _ := repository.NewMapRepo("")
 	srv := service.NewService(repo)
 	logger, e := zap.NewDevelopment()
 	if e != nil {

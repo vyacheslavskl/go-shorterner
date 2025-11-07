@@ -2,13 +2,13 @@ package app
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"flag"
-	"maps"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
@@ -17,38 +17,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
-
-func saveStorage(filename string, m map[string]string) error {
-	existing := make(map[string]string)
-	if _, err := os.Stat(filename); err == nil {
-		_ = loadStorage(filename, &existing)
-	}
-
-	maps.Copy(m, existing)
-
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(m)
-}
-
-func loadStorage(filename string, m *map[string]string) error {
-	file, err := os.Open(filename)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	defer file.Close()
-
-	return json.NewDecoder(file).Decode(m)
-}
 
 func Run() error {
 	log := zap.NewDevelopmentConfig()
@@ -68,11 +36,17 @@ func Run() error {
 
 	serAdr := os.Getenv("SERVER_ADDRESS")
 	if serAdr != "" {
-		_ = addr.Address.Set(serAdr)
+		err = addr.Address.Set(serAdr)
+		if err != nil {
+			return err
+		}
 	}
 	basAdr := os.Getenv("BASE_URL")
 	if basAdr != "" {
-		_ = addr.RedirectAddress.Set(basAdr)
+		err = addr.RedirectAddress.Set(basAdr)
+		if err != nil {
+			return err
+		}
 	}
 
 	storagePath := os.Getenv("FILE_STORAGE_PATH")
@@ -91,14 +65,11 @@ func Run() error {
 		"StoragePath", storagePath,
 	)
 
-	repo := repository.NewMapRepo()
-	err = loadStorage(storagePath, repo.LoadData())
+	repo, err := repository.NewMapRepo(storagePath)
 	if err != nil {
-		sugar.Warnln("Can not load Data storage")
+		return err
 	}
-
 	srv := service.NewService(repo)
-
 	handler := handler.NewShorterHandler(cfg, srv, sugar)
 
 	server := &http.Server{
@@ -108,6 +79,7 @@ func Run() error {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	errCh := repo.PeriodicSave(10 * time.Second)
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -115,13 +87,25 @@ func Run() error {
 		}
 	}()
 
-	<-stop
-	shutdownCtx := context.Background()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		return err
-	} else {
-		saveStorage(storagePath, repo.StoreData())
-		sugar.Infoln("Graceful shutdown")
-		return nil
+	for {
+		select {
+		case <-stop:
+			shutdownCtx := context.Background()
+			if err := server.Shutdown(shutdownCtx); err != nil {
+				return err
+			} else {
+				repo.SaveData()
+				sugar.Infoln("Graceful shutdown")
+				return nil
+			}
+		case err, ok := <-errCh:
+			if !ok {
+				sugar.Infoln("Err channel is closed")
+				return errors.New("errCh channel is closed")
+			}
+			sugar.Infoln("Error when saving data:", err)
+			return err
+		}
 	}
+
 }
