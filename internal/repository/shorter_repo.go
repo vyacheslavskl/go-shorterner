@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"sync"
 	"time"
@@ -34,10 +35,6 @@ type MapRepo struct {
 
 func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
 	repo := &MapRepo{data: make(map[string]URL), filename: storagePath}
-	if db != nil {
-		repo.db = db
-		return repo, nil
-	}
 
 	if repo.filename == "" {
 		return repo, nil
@@ -139,5 +136,8 @@ func (r *MapRepo) PeriodicSave(interval time.Duration) <-chan error {
 }
 
 func (r *MapRepo) Ping(ctx context.Context) error {
+	if r.db == nil {
+		return errors.New("nil repo")
+	}
 	return r.db.Ping(ctx)
 }
