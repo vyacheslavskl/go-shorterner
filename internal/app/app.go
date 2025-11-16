@@ -69,6 +69,7 @@ func Run() error {
 		"Address", cfg.Address.String(),
 		"RedirectAddress", cfg.RedirectAddress.String(),
 		"StoragePath", storagePath,
+		"DSN", dsn,
 	)
 	var conn *pgx.Conn
 	if dsn != "" {
