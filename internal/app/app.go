@@ -69,15 +69,14 @@ func Run() error {
 		"Address", cfg.Address.String(),
 		"RedirectAddress", cfg.RedirectAddress.String(),
 		"StoragePath", storagePath,
-		"DSN", dsn,
 	)
 	var conn *pgx.Conn
 	if dsn != "" {
-		ctx := context.Background()
-		conn, err := pgx.Connect(ctx, dsn)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    	defer cancel()
+		conn, err = pgx.Connect(ctx, dsn)
 		if err != nil {
-			sugar.Errorw("Unable to connect to database: %v\n", err)
-			conn.Close(context.Background())
+			sugar.Errorln("Unable to connect to database ", err)
 			return err
 		}
 	} else {
@@ -114,6 +113,7 @@ func Run() error {
 				return err
 			} else {
 				repo.SaveData()
+				repo.Close(context.Background())
 				sugar.Infoln("Graceful shutdown")
 				return nil
 			}
