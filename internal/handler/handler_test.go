@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
@@ -62,7 +63,8 @@ func TestHander(t *testing.T) {
 	}
 
 	cfg := new(config.Config)
-	repo, _ := repository.NewMapRepo("")
+	con := &pgx.Conn{}
+	repo, _ := repository.NewMapRepo(con, "")
 	srv := service.NewService(repo)
 	logger, e := zap.NewDevelopment()
 	if e != nil {

@@ -31,6 +31,7 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r.Post("/", h.PostLink)
 	r.Get("/{id}", h.GetLink)
 	r.Post("/api/shorten", h.PostAPIShorten)
+	r.Get("/ping", h.Ping)
 
 	r.NotFound(h.GetRootLink)
 
@@ -39,6 +40,13 @@ func (h *ShorterHandler) Routes() http.Handler {
 
 func (h *ShorterHandler) GetRootLink(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusBadRequest)
+}
+
+func (h *ShorterHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	if err := h.srv.Ping(r.Context()); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
