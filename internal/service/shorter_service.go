@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 )
@@ -39,5 +40,8 @@ func (s *ShortServerice) SaveURL(u string) string {
 }
 
 func (s *ShortServerice) Ping(ctx context.Context) error {
+	if s.repo == nil {
+		return errors.New("nil repo")
+	}
 	return s.repo.Ping(ctx)
 }

@@ -70,14 +70,18 @@ func Run() error {
 		"RedirectAddress", cfg.RedirectAddress.String(),
 		"StoragePath", storagePath,
 	)
-
-	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, dsn)
-	if err != nil {
-		sugar.Errorw("Unable to connect to database: %v\n", err)
-		return err
+	var conn *pgx.Conn
+	if dsn != "" {
+		ctx := context.Background()
+		conn, err := pgx.Connect(ctx, dsn)
+		if err != nil {
+			sugar.Errorw("Unable to connect to database: %v\n", err)
+			conn.Close(context.Background())
+			return err
+		}
+	} else {
+		conn = nil
 	}
-	defer conn.Close(context.Background())
 
 	repo, err := repository.NewMapRepo(conn, storagePath)
 	if err != nil {

@@ -33,7 +33,12 @@ type MapRepo struct {
 }
 
 func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
-	repo := &MapRepo{db: db, data: make(map[string]URL), filename: storagePath}
+	repo := &MapRepo{data: make(map[string]URL), filename: storagePath}
+	if db != nil {
+		repo.db = db
+		return repo, nil
+	}
+
 	if repo.filename == "" {
 		return repo, nil
 	}
