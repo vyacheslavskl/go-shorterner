@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
@@ -54,6 +55,11 @@ func Run() error {
 		flag.StringVar(&storagePath, "f", "urls.json", "path to storage urls")
 	}
 
+	dsn := os.Getenv("DATABASE_DSN")
+	if dsn == "" {
+		flag.StringVar(&dsn, "d", "", "dsn for Postgres")
+	}
+
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
 	flag.Parse()
@@ -65,7 +71,15 @@ func Run() error {
 		"StoragePath", storagePath,
 	)
 
-	repo, err := repository.NewMapRepo(storagePath)
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		sugar.Errorw("Unable to connect to database: %v\n", err)
+		return err
+	}
+	defer conn.Close(context.Background())
+
+	repo, err := repository.NewMapRepo(conn, storagePath)
 	if err != nil {
 		return err
 	}

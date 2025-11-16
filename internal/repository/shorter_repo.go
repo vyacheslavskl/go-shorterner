@@ -1,12 +1,14 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type URL struct {
@@ -20,16 +22,18 @@ type Repository interface {
 	GetLink(shortURL string) (string, bool)
 	LoadData() error
 	SaveData() error
+	Ping(ctx context.Context) error
 }
 
 type MapRepo struct {
+	db       *pgx.Conn
 	mu       sync.RWMutex
 	data     map[string]URL
 	filename string
 }
 
-func NewMapRepo(storagePath string) (*MapRepo, error) {
-	repo := &MapRepo{data: make(map[string]URL), filename: storagePath}
+func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
+	repo := &MapRepo{db: db, data: make(map[string]URL), filename: storagePath}
 	if repo.filename == "" {
 		return repo, nil
 	}
@@ -127,4 +131,8 @@ func (r *MapRepo) PeriodicSave(interval time.Duration) <-chan error {
 		}
 	}()
 	return errCh
+}
+
+func (r *MapRepo) Ping(ctx context.Context) error {
+	return r.db.Ping(ctx)
 }
