@@ -147,5 +147,8 @@ func (r *MapRepo) Ping(ctx context.Context) error {
 }
 
 func (r *MapRepo) Close(ctx context.Context) error {
+	if r.db == nil {
+		return nil
+	}
 	return r.db.Close(ctx)
 }

@@ -2,14 +2,19 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
@@ -73,7 +78,7 @@ func Run() error {
 	var conn *pgx.Conn
 	if dsn != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    	defer cancel()
+		defer cancel()
 		conn, err = pgx.Connect(ctx, dsn)
 		if err != nil {
 			sugar.Errorln("Unable to connect to database ", err)
@@ -81,6 +86,28 @@ func Run() error {
 		}
 	} else {
 		conn = nil
+	}
+
+	if conn != nil {
+		db, err := sql.Open("postgres", dsn)
+		if err != nil {
+			return err
+		}
+		driver, err := postgres.WithInstance(db, &postgres.Config{})
+		if err != nil {
+			return err
+		}
+		wd, _ := os.Getwd()
+		path := filepath.Join(wd, "migrations")
+		src := "file://" + filepath.ToSlash(path)
+		m, err := migrate.NewWithDatabaseInstance(
+			src,
+			"postgres", driver)
+		if err != nil {
+			return err
+		}
+		m.Up()
+		sugar.Infow("Migrations applied")
 	}
 
 	repo, err := repository.NewMapRepo(conn, storagePath)
