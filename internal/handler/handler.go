@@ -70,13 +70,21 @@ func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL, _ := h.srv.SaveURL(string(url))
-
+	shortURL, err := h.srv.SaveURL(string(url))
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 
 	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(response))
+	if err != nil {
+		var dupErr *repository.DuplicateError
+		if errors.As(err, &dupErr) {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
+	} else {
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(response))
+	}
 }
 
 func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) {
