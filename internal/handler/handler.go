@@ -2,12 +2,14 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	models "github.com/vyacheslavskl/go-shorterner/internal/model"
+	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 	"go.uber.org/zap"
 )
@@ -68,7 +70,8 @@ func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL := h.srv.SaveURL(string(url))
+	shortURL, _ := h.srv.SaveURL(string(url))
+
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 
 	w.Header().Set("Content-Type", "text/plain")
@@ -90,12 +93,20 @@ func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	shortURL := h.srv.SaveURL(req.URL)
+	shortURL, err := h.srv.SaveURL(req.URL)
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
-
 	resp := models.Response{Result: response}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	if err != nil {
+		var dupErr *repository.DuplicateError
+		if errors.As(err, &dupErr) {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
+	} else {
+		w.WriteHeader(http.StatusCreated)
+	}
 
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(resp); err != nil {
@@ -119,9 +130,16 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 
 	var resp []models.BatchResponse
 	for _, req := range req {
+		answer, err := h.srv.SaveURL(req.OriginalURL)
+		if err != nil {
+			resp = append(resp, models.BatchResponse{
+				CorrelationID: req.CorrelationID,
+				ShortURL:      "",
+			})
+		}
 		resp = append(resp, models.BatchResponse{
 			CorrelationID: req.CorrelationID,
-			ShortURL:      h.cfg.RedirectAddress.String() + "/" + h.srv.SaveURL(req.OriginalURL),
+			ShortURL:      h.cfg.RedirectAddress.String() + "/" + answer,
 		})
 	}
 

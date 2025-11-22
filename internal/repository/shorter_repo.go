@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type URL struct {
@@ -19,7 +21,7 @@ type URL struct {
 }
 
 type Repository interface {
-	PutLink(url, shortURL string)
+	PutLink(url, shortURL string) error
 	GetLink(shortURL string) (string, bool)
 	LoadData() error
 	SaveData() error
@@ -32,6 +34,14 @@ type MapRepo struct {
 	mu       sync.RWMutex
 	data     map[string]URL
 	filename string
+}
+
+type DuplicateError struct {
+	ShortURL string
+}
+
+func (e *DuplicateError) Error() string {
+	return fmt.Sprintf("short URL already exists: %s", e.ShortURL)
 }
 
 func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
@@ -48,7 +58,7 @@ func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
 	return repo, err
 }
 
-func (r *MapRepo) PutLink(url, shortURL string) {
+func (r *MapRepo) PutLink(url, shortURL string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	uuid := uuid.New().String()
@@ -56,11 +66,24 @@ func (r *MapRepo) PutLink(url, shortURL string) {
 	r.data[shortURL] = u
 
 	if r.db != nil {
-		_ = r.db.QueryRow(context.Background(),
+		_, err := r.db.Exec(context.Background(),
 			`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)`,
 			u.UUID, u.ShortURL, u.URL)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				if pgErr.Code == "23505" {
+					return &DuplicateError{ShortURL: shortURL}
+				}
+			}
+		}
 	}
+	return nil
 }
+
+// func (r *MapRepo) inserDB(u URL) (string, error) {
+
+// }
 
 func (r *MapRepo) GetLink(shortURL string) (string, bool) {
 	r.mu.RLock()
