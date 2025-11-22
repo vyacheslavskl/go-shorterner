@@ -83,8 +83,8 @@ func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(response))
 	}
+	w.Write([]byte(response))
 }
 
 func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) {
