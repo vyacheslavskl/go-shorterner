@@ -100,10 +100,9 @@ func Run() error {
 		wd, _ := os.Getwd()
 		path := filepath.Join(wd, "migrations")
 		src := "file://" + filepath.ToSlash(path)
-		m, err := migrate.NewWithDatabaseInstance(
-			src,
-			"postgres", driver)
+		m, err := migrate.NewWithDatabaseInstance(src, "postgres", driver)
 		if err != nil {
+			sugar.Errorln("Migrations failed", err)
 			return err
 		}
 		m.Up()

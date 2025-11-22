@@ -54,6 +54,12 @@ func (r *MapRepo) PutLink(url, shortURL string) {
 	uuid := uuid.New().String()
 	u := URL{UUID: uuid, ShortURL: shortURL, URL: url}
 	r.data[shortURL] = u
+
+	if r.db != nil {
+		_ = r.db.QueryRow(context.Background(),
+			`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)`,
+			u.UUID, u.ShortURL, u.URL)
+	}
 }
 
 func (r *MapRepo) GetLink(shortURL string) (string, bool) {
