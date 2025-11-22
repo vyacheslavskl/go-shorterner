@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 
@@ -35,4 +36,8 @@ func (s *ShortServerice) SaveURL(u string) string {
 	s.repo.PutLink(u, resultHash)
 
 	return resultHash
+}
+
+func (s *ShortServerice) Ping(ctx context.Context) error {
+	return s.repo.Ping(ctx)
 }
