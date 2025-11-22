@@ -31,6 +31,7 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r.Post("/", h.PostLink)
 	r.Get("/{id}", h.GetLink)
 	r.Post("/api/shorten", h.PostAPIShorten)
+	r.Post("/api/shorten/batch", h.PostAPIShortenBatch)
 	r.Get("/ping", h.Ping)
 
 	r.NotFound(h.GetRootLink)
@@ -93,6 +94,37 @@ func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) 
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 
 	resp := models.Response{Result: response}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(resp); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+// curl.exe -i -X  POST http://localhost:8080/api/shorten/batch -H "Content-Type: application/json" -d '[{\"correlation_id\": \"5deb996e-a5e3-4c56-bfe4-f5d4be91c5e9\", \"original_url\": \"sql.db\"}]'
+func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Content-Type") != "application/json" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var req []models.BatchRequest
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var resp []models.BatchResponse
+	for _, req := range req {
+		resp = append(resp, models.BatchResponse{
+			CorrelationID: req.CorrelationID,
+			ShortUrl:      h.cfg.RedirectAddress.String() + "/" + h.srv.SaveURL(req.OriginalUrl),
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
