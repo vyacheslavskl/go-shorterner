@@ -2,14 +2,20 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
@@ -54,6 +60,11 @@ func Run() error {
 		flag.StringVar(&storagePath, "f", "urls.json", "path to storage urls")
 	}
 
+	dsn := os.Getenv("DATABASE_DSN")
+	if dsn == "" {
+		flag.StringVar(&dsn, "d", "", "dsn for Postgres")
+	}
+
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
 	flag.Parse()
@@ -64,8 +75,41 @@ func Run() error {
 		"RedirectAddress", cfg.RedirectAddress.String(),
 		"StoragePath", storagePath,
 	)
+	var conn *pgx.Conn
+	if dsn != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		conn, err = pgx.Connect(ctx, dsn)
+		if err != nil {
+			sugar.Errorln("Unable to connect to database ", err)
+			return err
+		}
+	} else {
+		conn = nil
+	}
 
-	repo, err := repository.NewMapRepo(storagePath)
+	if conn != nil {
+		db, err := sql.Open("postgres", dsn)
+		if err != nil {
+			return err
+		}
+		driver, err := postgres.WithInstance(db, &postgres.Config{})
+		if err != nil {
+			return err
+		}
+		wd, _ := os.Getwd()
+		path := filepath.Join(wd, "migrations")
+		src := "file://" + filepath.ToSlash(path)
+		m, err := migrate.NewWithDatabaseInstance(src, "postgres", driver)
+		if err != nil {
+			sugar.Errorln("Migrations failed", err)
+			return err
+		}
+		m.Up()
+		sugar.Infow("Migrations applied")
+	}
+
+	repo, err := repository.NewMapRepo(conn, storagePath)
 	if err != nil {
 		return err
 	}
@@ -95,6 +139,7 @@ func Run() error {
 				return err
 			} else {
 				repo.SaveData()
+				repo.Close(context.Background())
 				sugar.Infoln("Graceful shutdown")
 				return nil
 			}
