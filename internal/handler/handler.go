@@ -121,7 +121,7 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 	for _, req := range req {
 		resp = append(resp, models.BatchResponse{
 			CorrelationID: req.CorrelationID,
-			ShortUrl:      h.cfg.RedirectAddress.String() + "/" + h.srv.SaveURL(req.OriginalUrl),
+			ShortURL:      h.cfg.RedirectAddress.String() + "/" + h.srv.SaveURL(req.OriginalURL),
 		})
 	}
 
