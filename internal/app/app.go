@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -66,10 +67,10 @@ func Run() error {
 		flag.StringVar(&dsn, "d", "", "dsn for Postgres")
 	}
 
-	fullPath := os.Getenv("MIGRATIONS_PATH")
-	if dsn == "" {
-		flag.StringVar(&fullPath, "m", "/migrations", "migration path")
-	}	
+	// fullPath := os.Getenv("MIGRATIONS_PATH")
+	// if dsn == "" {
+	// 	flag.StringVar(&fullPath, "m", "/migrations", "migration path")
+	// }	
 
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
@@ -103,10 +104,17 @@ func Run() error {
 		if err != nil {
 			return err
 		}
+		_, filename, _, ok := runtime.Caller(0)
+		if !ok {
+			return errors.New("failed to get runtime caller")
+		}
+		path := filepath.Dir(filename)
+		fullPath := filepath.Join(path, "..", "..", "migrations")
 		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 			return fmt.Errorf("migrations directory not found: %s", fullPath)
 		}
 		src := "file://" + filepath.ToSlash(fullPath)
+		sugar.Errorln("Migrations path", src)
 
 		m, err := migrate.NewWithDatabaseInstance(src, "postgres", driver)
 		if err != nil {
