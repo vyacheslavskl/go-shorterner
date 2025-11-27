@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -65,6 +66,11 @@ func Run() error {
 		flag.StringVar(&dsn, "d", "", "dsn for Postgres")
 	}
 
+	fullPath := os.Getenv("MIGRATIONS_PATH")
+	if dsn == "" {
+		flag.StringVar(&fullPath, "m", "/migrations", "migration path")
+	}	
+
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
 	flag.Parse()
@@ -97,9 +103,11 @@ func Run() error {
 		if err != nil {
 			return err
 		}
-		wd, _ := os.Getwd()
-		path := filepath.Join(wd, "migrations")
-		src := "file://" + filepath.ToSlash(path)
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			return fmt.Errorf("migrations directory not found: %s", fullPath)
+		}
+		src := "file://" + filepath.ToSlash(fullPath)
+
 		m, err := migrate.NewWithDatabaseInstance(src, "postgres", driver)
 		if err != nil {
 			sugar.Errorln("Migrations failed", err)
