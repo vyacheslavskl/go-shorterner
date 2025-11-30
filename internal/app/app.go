@@ -126,7 +126,7 @@ func Run() error {
 
 	var repo repository.Repository
 	if conn != nil {
-		repo, err = repository.NewDbRepo(conn)
+		repo, err = repository.NewDBRepo(conn)
 		if err != nil {
 			return err
 		}
@@ -175,5 +175,4 @@ func Run() error {
 			return err
 		}
 	}
-
 }

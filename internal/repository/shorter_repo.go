@@ -36,7 +36,7 @@ type MapRepo struct {
 	filename string
 }
 
-type DbRepo struct {
+type DBRepo struct {
 	db *pgx.Conn
 }
 
@@ -57,8 +57,8 @@ func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
 	return repo, err
 }
 
-func NewDbRepo(db *pgx.Conn) (*DbRepo, error) {
-	repo := &DbRepo{}
+func NewDBRepo(db *pgx.Conn) (*DBRepo, error) {
+	repo := &DBRepo{}
 	if db != nil {
 		repo.db = db
 	}
@@ -76,7 +76,7 @@ func (r *MapRepo) PutLink(url, shortURL string) error {
 	return nil
 }
 
-func (r *DbRepo) PutLink(url, shortURL string) error {
+func (r *DBRepo) PutLink(url, shortURL string) error {
 	uuid := uuid.New().String()
 	u := URL{UUID: uuid, ShortURL: shortURL, URL: url}
 
@@ -94,10 +94,10 @@ func (r *DbRepo) PutLink(url, shortURL string) error {
 	return nil
 }
 
-func (r *DbRepo) GetLink(shortURL string) (string, bool) {
+func (r *DBRepo) GetLink(shortURL string) (string, bool) {
 	var url string
 	err := r.db.QueryRow(context.Background(),
-		`select original_url from shorts where short_url == $1`,
+		`select original_url from shorts where short_url = $1`,
 		shortURL).Scan(&url)
 	if err != nil {
 		return "", false
@@ -172,11 +172,11 @@ func (r *MapRepo) LoadData() error {
 	return err
 }
 
-func (r *DbRepo) LoadData() error {
+func (r *DBRepo) LoadData() error {
 	return nil
 }
 
-func (r *DbRepo) SaveData() error {
+func (r *DBRepo) SaveData() error {
 	return nil
 }
 
@@ -194,7 +194,7 @@ func (r *MapRepo) PeriodicSave(interval time.Duration) <-chan error {
 	return errCh
 }
 
-func (r *DbRepo) Ping(ctx context.Context) error {
+func (r *DBRepo) Ping(ctx context.Context) error {
 	return r.db.Ping(ctx)
 }
 
@@ -206,11 +206,11 @@ func (r *MapRepo) Close(ctx context.Context) error {
 	return nil
 }
 
-func (r *DbRepo) Close(ctx context.Context) error {
+func (r *DBRepo) Close(ctx context.Context) error {
 	return r.db.Close(ctx)
 }
 
-func (r *DbRepo) PeriodicSave(interval time.Duration) <-chan error {
+func (r *DBRepo) PeriodicSave(interval time.Duration) <-chan error {
 	ch := make(chan error)
 	close(ch)
 	return ch
