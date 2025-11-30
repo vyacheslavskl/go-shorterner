@@ -68,9 +68,9 @@ func Run() error {
 	}
 
 	// fullPath := os.Getenv("MIGRATIONS_PATH")
-	// if dsn == "" {
+	// if fullPath == "" {
 	// 	flag.StringVar(&fullPath, "m", "/migrations", "migration path")
-	// }	
+	// }
 
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
@@ -114,7 +114,6 @@ func Run() error {
 			return fmt.Errorf("migrations directory not found: %s", fullPath)
 		}
 		src := "file://" + filepath.ToSlash(fullPath)
-		sugar.Errorln("Migrations path", src)
 
 		m, err := migrate.NewWithDatabaseInstance(src, "postgres", driver)
 		if err != nil {
@@ -125,10 +124,19 @@ func Run() error {
 		sugar.Infow("Migrations applied")
 	}
 
-	repo, err := repository.NewMapRepo(conn, storagePath)
-	if err != nil {
-		return err
+	var repo repository.Repository
+	if conn != nil {
+		repo, err = repository.NewDbRepo(conn)
+		if err != nil {
+			return err
+		}
+	} else {
+		repo, err = repository.NewMapRepo(conn, storagePath)
+		if err != nil {
+			return err
+		}
 	}
+
 	srv := service.NewService(repo)
 	handler := handler.NewShorterHandler(cfg, srv, sugar)
 
@@ -161,8 +169,7 @@ func Run() error {
 			}
 		case err, ok := <-errCh:
 			if !ok {
-				sugar.Infoln("Err channel is closed")
-				return errors.New("errCh channel is closed")
+				continue
 			}
 			sugar.Infoln("Error when saving data:", err)
 			return err

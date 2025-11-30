@@ -27,13 +27,17 @@ type Repository interface {
 	SaveData() error
 	Ping(ctx context.Context) error
 	Close(ctx context.Context) error
+	PeriodicSave(time.Duration) <-chan error
 }
 
 type MapRepo struct {
-	db       *pgx.Conn
 	mu       sync.RWMutex
 	data     map[string]URL
 	filename string
+}
+
+type DbRepo struct {
+	db *pgx.Conn
 }
 
 type DuplicateError struct {
@@ -46,16 +50,21 @@ func (e *DuplicateError) Error() string {
 
 func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
 	repo := &MapRepo{data: make(map[string]URL), filename: storagePath}
-	if db != nil {
-		repo.db = db
-	}
-
 	if repo.filename == "" {
 		return repo, nil
 	}
-
 	err := repo.LoadData()
 	return repo, err
+}
+
+func NewDbRepo(db *pgx.Conn) (*DbRepo, error) {
+	repo := &DbRepo{}
+	if db != nil {
+		repo.db = db
+	}
+	err := repo.LoadData()
+	return repo, err
+
 }
 
 func (r *MapRepo) PutLink(url, shortURL string) error {
@@ -64,30 +73,39 @@ func (r *MapRepo) PutLink(url, shortURL string) error {
 	uuid := uuid.New().String()
 	u := URL{UUID: uuid, ShortURL: shortURL, URL: url}
 	r.data[shortURL] = u
+	return nil
+}
 
-	if r.db != nil {
-		_, err := r.db.Exec(context.Background(),
-			`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)`,
-			u.UUID, u.ShortURL, u.URL)
-		if err != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) {
-				if pgErr.Code == "23505" {
-					return &DuplicateError{ShortURL: shortURL}
-				}
+func (r *DbRepo) PutLink(url, shortURL string) error {
+	uuid := uuid.New().String()
+	u := URL{UUID: uuid, ShortURL: shortURL, URL: url}
+
+	_, err := r.db.Exec(context.Background(),
+		`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)`,
+		u.UUID, u.ShortURL, u.URL)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" {
+				return &DuplicateError{ShortURL: shortURL}
 			}
 		}
 	}
 	return nil
 }
 
-// func (r *MapRepo) inserDB(u URL) (string, error) {
-
-// }
+func (r *DbRepo) GetLink(shortURL string) (string, bool) {
+	var url string
+	err := r.db.QueryRow(context.Background(),
+		`select original_url from shorts where short_url == $1`,
+		shortURL).Scan(&url)
+	if err != nil {
+		return "", false
+	}
+	return url, true
+}
 
 func (r *MapRepo) GetLink(shortURL string) (string, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 	val, err := r.data[shortURL]
 	return val.URL, err
 }
@@ -154,6 +172,14 @@ func (r *MapRepo) LoadData() error {
 	return err
 }
 
+func (r *DbRepo) LoadData() error {
+	return nil
+}
+
+func (r *DbRepo) SaveData() error {
+	return nil
+}
+
 func (r *MapRepo) PeriodicSave(interval time.Duration) <-chan error {
 	ticker := time.NewTicker(interval)
 	errCh := make(chan error)
@@ -168,16 +194,24 @@ func (r *MapRepo) PeriodicSave(interval time.Duration) <-chan error {
 	return errCh
 }
 
-func (r *MapRepo) Ping(ctx context.Context) error {
-	if r.db == nil {
-		return errors.New("nil repo")
-	}
+func (r *DbRepo) Ping(ctx context.Context) error {
 	return r.db.Ping(ctx)
 }
 
+func (r *MapRepo) Ping(ctx context.Context) error {
+	return nil
+}
+
 func (r *MapRepo) Close(ctx context.Context) error {
-	if r.db == nil {
-		return nil
-	}
+	return nil
+}
+
+func (r *DbRepo) Close(ctx context.Context) error {
 	return r.db.Close(ctx)
+}
+
+func (r *DbRepo) PeriodicSave(interval time.Duration) <-chan error {
+	ch := make(chan error)
+	close(ch)
+	return ch
 }
