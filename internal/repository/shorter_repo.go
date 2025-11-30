@@ -37,7 +37,9 @@ type MapRepo struct {
 }
 
 type DBRepo struct {
-	db *pgx.Conn
+	mu   sync.RWMutex
+	data map[string]URL
+	db   *pgx.Conn
 }
 
 type DuplicateError struct {
@@ -58,13 +60,11 @@ func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
 }
 
 func NewDBRepo(db *pgx.Conn) (*DBRepo, error) {
-	repo := &DBRepo{}
+	repo := &DBRepo{data: make(map[string]URL)}
 	if db != nil {
 		repo.db = db
 	}
-	err := repo.LoadData()
-	return repo, err
-
+	return repo, nil
 }
 
 func (r *MapRepo) PutLink(url, shortURL string) error {
@@ -77,8 +77,11 @@ func (r *MapRepo) PutLink(url, shortURL string) error {
 }
 
 func (r *DBRepo) PutLink(url, shortURL string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	uuid := uuid.New().String()
 	u := URL{UUID: uuid, ShortURL: shortURL, URL: url}
+	r.data[shortURL] = u
 
 	_, err := r.db.Exec(context.Background(),
 		`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)`,
@@ -95,14 +98,23 @@ func (r *DBRepo) PutLink(url, shortURL string) error {
 }
 
 func (r *DBRepo) GetLink(shortURL string) (string, bool) {
-	var url string
+	r.mu.RLock()
+	val, ok := r.data[shortURL]
+	r.mu.RUnlock()
+	if val.URL != "" && ok {
+		return val.URL, ok
+	}
+	var url URL
 	err := r.db.QueryRow(context.Background(),
-		`select original_url from shorts where short_url = $1`,
-		shortURL).Scan(&url)
+		`select uuid, short_url, original_url from shorts where short_url = $1`,
+		shortURL).Scan(&url.UUID, &url.ShortURL, &url.URL)
 	if err != nil {
 		return "", false
 	}
-	return url, true
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.data[shortURL] = url
+	return url.URL, true
 }
 
 func (r *MapRepo) GetLink(shortURL string) (string, bool) {
@@ -128,7 +140,6 @@ func (r *MapRepo) saveStorage() error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
