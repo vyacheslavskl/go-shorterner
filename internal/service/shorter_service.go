@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 
@@ -30,9 +31,13 @@ func generateShort(url string) string {
 	return result[:8] // Берем первые 8 символов
 }
 
-func (s *ShortServerice) SaveURL(u string) string {
+func (s *ShortServerice) SaveURL(u string) (string, error) {
 	resultHash := generateShort(u)
-	s.repo.PutLink(u, resultHash)
+	err := s.repo.PutLink(u, resultHash)
 
-	return resultHash
+	return resultHash, err
+}
+
+func (s *ShortServerice) Ping(ctx context.Context) error {
+	return s.repo.Ping(ctx)
 }

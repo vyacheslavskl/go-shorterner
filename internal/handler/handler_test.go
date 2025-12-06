@@ -62,7 +62,8 @@ func TestHander(t *testing.T) {
 	}
 
 	cfg := new(config.Config)
-	repo, _ := repository.NewMapRepo("")
+	// con := &pgx.Conn{}
+	repo, _ := repository.NewMapRepo(nil, "")
 	srv := service.NewService(repo)
 	logger, e := zap.NewDevelopment()
 	if e != nil {

@@ -2,12 +2,14 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	models "github.com/vyacheslavskl/go-shorterner/internal/model"
+	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 	"go.uber.org/zap"
 )
@@ -31,6 +33,8 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r.Post("/", h.PostLink)
 	r.Get("/{id}", h.GetLink)
 	r.Post("/api/shorten", h.PostAPIShorten)
+	r.Post("/api/shorten/batch", h.PostAPIShortenBatch)
+	r.Get("/ping", h.Ping)
 
 	r.NotFound(h.GetRootLink)
 
@@ -39,6 +43,13 @@ func (h *ShorterHandler) Routes() http.Handler {
 
 func (h *ShorterHandler) GetRootLink(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusBadRequest)
+}
+
+func (h *ShorterHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	if err := h.srv.Ping(r.Context()); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
@@ -59,11 +70,20 @@ func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL := h.srv.SaveURL(string(url))
+	shortURL, err := h.srv.SaveURL(string(url))
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 
 	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusCreated)
+	if err != nil {
+		var dupErr *repository.DuplicateError
+		if errors.As(err, &dupErr) {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
+	} else {
+		w.WriteHeader(http.StatusCreated)
+	}
 	w.Write([]byte(response))
 }
 
@@ -81,10 +101,56 @@ func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	shortURL := h.srv.SaveURL(req.URL)
+	shortURL, err := h.srv.SaveURL(req.URL)
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
-
 	resp := models.Response{Result: response}
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		var dupErr *repository.DuplicateError
+		if errors.As(err, &dupErr) {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
+	} else {
+		w.WriteHeader(http.StatusCreated)
+	}
+
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(resp); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+// curl.exe -i -X  POST http://localhost:8080/api/shorten/batch -H "Content-Type: application/json" -d '[{\"correlation_id\": \"5deb996e-a5e3-4c56-bfe4-f5d4be91c5e9\", \"original_url\": \"sql.db\"}]'
+func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Content-Type") != "application/json" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var req []models.BatchRequest
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var resp []models.BatchResponse
+	for _, req := range req {
+		answer, err := h.srv.SaveURL(req.OriginalURL)
+		if err != nil {
+			resp = append(resp, models.BatchResponse{
+				CorrelationID: req.CorrelationID,
+				ShortURL:      "",
+			})
+		}
+		resp = append(resp, models.BatchResponse{
+			CorrelationID: req.CorrelationID,
+			ShortURL:      h.cfg.RedirectAddress.String() + "/" + answer,
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
