@@ -6,7 +6,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
-const TOKEN_EXP = time.Minute * 30
+const TokenExp = time.Minute * 30
 
 type JWTService struct {
 	SecretKey []byte
@@ -24,7 +24,7 @@ type Claims struct {
 func (j *JWTService) GenerateToken(userID string) (string, error) {
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TOKEN_EXP)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TokenExp)),
 		},
 		UserID: userID,
 	}

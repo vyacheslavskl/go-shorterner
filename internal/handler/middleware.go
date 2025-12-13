@@ -13,6 +13,12 @@ import (
 	"go.uber.org/zap"
 )
 
+type contextKey string
+
+const (
+	UserIDKey contextKey = "user_id"
+)
+
 type (
 	responseData struct {
 		status int
@@ -174,13 +180,13 @@ func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
 					Name:     "auth_token",
 					Value:    token,
 					Path:     "/",
-					MaxAge:   int(auth.TOKEN_EXP / time.Second),
+					MaxAge:   int(auth.TokenExp / time.Second),
 					HttpOnly: true,
-					Secure:   false, // Включите true в продакшене
+					Secure:   true,
 					SameSite: http.SameSiteStrictMode,
 				})
 
-				ctx := context.WithValue(r.Context(), "user_id", userID)
+				ctx := context.WithValue(r.Context(), UserIDKey, userID)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -191,7 +197,7 @@ func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), "user_id", userID)
+			ctx := context.WithValue(r.Context(), UserIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

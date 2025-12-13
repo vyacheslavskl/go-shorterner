@@ -129,10 +129,6 @@ func (r *DBRepo) GetUserUrls() ([]models.UserUrlsResponse, bool) {
 		}
 		urls = append(urls, u)
 	}
-
-	if err != nil {
-		return nil, false
-	}
 	return urls, true
 }
 
