@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
@@ -70,10 +71,11 @@ func TestHander(t *testing.T) {
 		panic(e)
 	}
 	sugar := logger.Sugar()
+	jwt := auth.NewJWTService([]byte("super_test_key"))
 	defer logger.Sync()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := NewShorterHandler(cfg, srv, sugar).Routes()
+			handler := NewShorterHandler(cfg, srv, sugar, jwt).Routes()
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()

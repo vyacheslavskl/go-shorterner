@@ -2,11 +2,14 @@ package handler
 
 import (
 	"compress/gzip"
+	"context"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"go.uber.org/zap"
 )
 
@@ -152,4 +155,44 @@ func GzipMiddleware(h http.Handler) http.Handler {
 
 		h.ServeHTTP(ow, r)
 	})
+}
+
+func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie("auth_token")
+			var userID string
+
+			if err != nil {
+				userID = uuid.New().String()
+				token, err := jwt.GenerateToken(userID)
+				if err != nil {
+					http.Error(w, "Internal error", http.StatusInternalServerError)
+					return
+				}
+				http.SetCookie(w, &http.Cookie{
+					Name:     "auth_token",
+					Value:    token,
+					Path:     "/",
+					MaxAge:   int(auth.TOKEN_EXP / time.Second),
+					HttpOnly: true,
+					Secure:   false, // Включите true в продакшене
+					SameSite: http.SameSiteStrictMode,
+				})
+
+				ctx := context.WithValue(r.Context(), "user_id", userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			userID, err = jwt.GetUserID(cookie.Value)
+			if err != nil {
+				http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), "user_id", userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }

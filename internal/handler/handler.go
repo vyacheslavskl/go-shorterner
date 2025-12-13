@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
@@ -18,16 +19,18 @@ type ShorterHandler struct {
 	cfg *config.Config
 	srv *service.ShortServerice
 	log *zap.SugaredLogger
+	jwt *auth.JWTService
 }
 
-func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap.SugaredLogger) *ShorterHandler {
-	return &ShorterHandler{cfg: cfg, srv: srv, log: log}
+func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap.SugaredLogger, jwt *auth.JWTService) *ShorterHandler {
+	return &ShorterHandler{cfg: cfg, srv: srv, log: log, jwt: jwt}
 }
 
 func (h *ShorterHandler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(GzipMiddleware)
 	r.Use(WithLogging(h.log))
+	r.Use(AuthMiddleware(h.jwt))
 
 	r.Get("/", h.GetRootLink)
 	r.Post("/", h.PostLink)
@@ -35,6 +38,7 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r.Post("/api/shorten", h.PostAPIShorten)
 	r.Post("/api/shorten/batch", h.PostAPIShortenBatch)
 	r.Get("/ping", h.Ping)
+	r.Get("/api/user/urls", h.GetAPIUserUrls)
 
 	r.NotFound(h.GetRootLink)
 
@@ -156,6 +160,16 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(resp); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *ShorterHandler) GetAPIUserUrls(w http.ResponseWriter, r *http.Request) {
+	urls, ok := h.srv.GetUserUrls()
+	enc := json.NewEncoder(w)
+	err := enc.Encode(urls)
+	if ok && err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

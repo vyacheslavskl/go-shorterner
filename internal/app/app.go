@@ -18,6 +18,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5"
+	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
@@ -67,10 +68,11 @@ func Run() error {
 		flag.StringVar(&dsn, "d", "", "dsn for Postgres")
 	}
 
-	// fullPath := os.Getenv("MIGRATIONS_PATH")
-	// if fullPath == "" {
-	// 	flag.StringVar(&fullPath, "m", "/migrations", "migration path")
-	// }
+	jwt := os.Getenv("JWT_KEY")
+	if jwt == "" {
+		jwt = "secret_temp_key"
+	}
+	jwtService := auth.NewJWTService([]byte(jwt))
 
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
@@ -138,7 +140,7 @@ func Run() error {
 	}
 
 	srv := service.NewService(repo)
-	handler := handler.NewShorterHandler(cfg, srv, sugar)
+	handler := handler.NewShorterHandler(cfg, srv, sugar, jwtService)
 
 	server := &http.Server{
 		Addr:    cfg.Address.String(),

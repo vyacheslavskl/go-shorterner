@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 )
 
 type URL struct {
@@ -28,6 +29,7 @@ type Repository interface {
 	Ping(ctx context.Context) error
 	Close(ctx context.Context) error
 	PeriodicSave(time.Duration) <-chan error
+	GetUserUrls() ([]models.UserUrlsResponse, bool)
 }
 
 type MapRepo struct {
@@ -108,6 +110,41 @@ func (r *DBRepo) GetLink(shortURL string) (string, bool) {
 func (r *MapRepo) GetLink(shortURL string) (string, bool) {
 	val, err := r.data[shortURL]
 	return val.URL, err
+}
+
+func (r *DBRepo) GetUserUrls() ([]models.UserUrlsResponse, bool) {
+	rows, err := r.db.Query(context.Background(),
+		`SELECT short_url, original_url FROM shorts`)
+	if err != nil {
+		return nil, false
+	}
+	defer rows.Close()
+
+	var urls []models.UserUrlsResponse
+	for rows.Next() {
+		var u models.UserUrlsResponse
+		err := rows.Scan(&u.ShortURL, &u.OriginalURL)
+		if err != nil {
+			return nil, false
+		}
+		urls = append(urls, u)
+	}
+
+	if err != nil {
+		return nil, false
+	}
+	return urls, true
+}
+
+func (r *MapRepo) GetUserUrls() ([]models.UserUrlsResponse, bool) {
+	var urls []models.UserUrlsResponse
+	for k, v := range r.data {
+		urls = append(urls, models.UserUrlsResponse{
+			ShortURL:    k,
+			OriginalURL: v.URL,
+		})
+	}
+	return urls, true
 }
 
 func (r *MapRepo) saveStorage() error {

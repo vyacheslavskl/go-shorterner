@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 )
 
@@ -22,6 +23,10 @@ func (s *ShortServerice) PutLink(url, shortURL string) {
 
 func (s *ShortServerice) GetLink(shortURL string) (string, bool) {
 	return s.repo.GetLink(shortURL)
+}
+
+func (s *ShortServerice) GetUserUrls() ([]models.UserUrlsResponse, bool) {
+	return s.repo.GetUserUrls()
 }
 
 func generateShort(url string) string {
