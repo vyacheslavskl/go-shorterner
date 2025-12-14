@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -58,7 +59,7 @@ func (h *ShorterHandler) Ping(w http.ResponseWriter, r *http.Request) {
 
 func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
 	fURL := r.URL.Path
-	res, ok := h.srv.GetLink(fURL[1:])
+	res, ok := h.srv.GetLink(r.Context(), fURL[1:])
 	if ok && res != "" {
 		w.Header().Add("Location", res)
 		w.WriteHeader(http.StatusTemporaryRedirect)
@@ -68,13 +69,18 @@ func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(UserIDKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	url, err := io.ReadAll(r.Body)
 	if err != nil || string(url) == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	shortURL, err := h.srv.SaveURL(string(url))
+	shortURL, err := h.srv.SaveURL(context.Background(), string(url), userID)
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 
 	w.Header().Set("Content-Type", "text/plain")
@@ -97,6 +103,11 @@ func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	userID, ok := r.Context().Value(UserIDKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	var req models.Request
 	dec := json.NewDecoder(r.Body)
@@ -105,7 +116,7 @@ func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	shortURL, err := h.srv.SaveURL(req.URL)
+	shortURL, err := h.srv.SaveURL(r.Context(), req.URL, userID)
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 	resp := models.Response{Result: response}
 	w.Header().Set("Content-Type", "application/json")
@@ -133,6 +144,11 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	userID, ok := r.Context().Value(UserIDKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	var req []models.BatchRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
@@ -142,7 +158,7 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 
 	var resp []models.BatchResponse
 	for _, req := range req {
-		answer, err := h.srv.SaveURL(req.OriginalURL)
+		answer, err := h.srv.SaveURL(r.Context(), req.OriginalURL, userID)
 		if err != nil {
 			resp = append(resp, models.BatchResponse{
 				CorrelationID: req.CorrelationID,
@@ -166,11 +182,21 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *ShorterHandler) GetAPIUserUrls(w http.ResponseWriter, r *http.Request) {
-	urls, ok := h.srv.GetUserUrls()
+	userID, ok := r.Context().Value(UserIDKey).(string)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	urls, ok := h.srv.GetUserUrls(r.Context(), userID)
 	enc := json.NewEncoder(w)
 	err := enc.Encode(urls)
 	if ok && err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	if len(urls) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+	}
+
 }

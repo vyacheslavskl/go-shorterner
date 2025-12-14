@@ -182,7 +182,7 @@ func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
 					Path:     "/",
 					MaxAge:   int(auth.TokenExp / time.Second),
 					HttpOnly: true,
-					Secure:   true,
+					Secure:   false,
 					SameSite: http.SameSiteStrictMode,
 				})
 
