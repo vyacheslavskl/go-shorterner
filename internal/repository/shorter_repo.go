@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 )
 
 type URL struct {
@@ -20,14 +21,20 @@ type URL struct {
 	URL      string `json:"original_url"`
 }
 
+type UserURL struct {
+	URLUUID string `json:"url_uuid"`
+	UserID  string `json:"user_id"`
+}
+
 type Repository interface {
-	PutLink(url, shortURL string) error
-	GetLink(shortURL string) (string, bool)
+	PutLink(ctx context.Context, url, shortURL, userID string) error
+	GetLink(ctx context.Context, shortURL string) (string, bool)
 	LoadData() error
 	SaveData() error
 	Ping(ctx context.Context) error
 	Close(ctx context.Context) error
 	PeriodicSave(time.Duration) <-chan error
+	GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool)
 }
 
 type MapRepo struct {
@@ -67,7 +74,7 @@ func NewDBRepo(db *pgx.Conn) (*DBRepo, error) {
 
 }
 
-func (r *MapRepo) PutLink(url, shortURL string) error {
+func (r *MapRepo) PutLink(ctx context.Context, url, shortURL, userID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	uuid := uuid.New().String()
@@ -76,27 +83,45 @@ func (r *MapRepo) PutLink(url, shortURL string) error {
 	return nil
 }
 
-func (r *DBRepo) PutLink(url, shortURL string) error {
+func (r *DBRepo) PutLink(ctx context.Context, url, shortURL, userID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	uuid := uuid.New().String()
 	u := URL{UUID: uuid, ShortURL: shortURL, URL: url}
 
-	_, err := r.db.Exec(context.Background(),
+	_, errShorts := tx.Exec(ctx,
 		`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)`,
 		u.UUID, u.ShortURL, u.URL)
-	if err != nil {
+	if errShorts != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
+		if errors.As(errShorts, &pgErr) {
 			if pgErr.Code == "23505" {
 				return &DuplicateError{ShortURL: shortURL}
 			}
 		}
 	}
+
+	uu := UserURL{UserID: userID, URLUUID: uuid}
+	_, errUrls := tx.Exec(ctx,
+		`insert into user_urls (user_id , url_uuid) values ($1, $2)`,
+		uu.UserID, uu.URLUUID)
+	if errUrls != nil {
+		return fmt.Errorf("failed to insert into user_urls: %w", errUrls)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return nil
 }
 
-func (r *DBRepo) GetLink(shortURL string) (string, bool) {
+func (r *DBRepo) GetLink(ctx context.Context, shortURL string) (string, bool) {
 	var url string
-	err := r.db.QueryRow(context.Background(),
+	err := r.db.QueryRow(ctx,
 		`select original_url from shorts where short_url = $1`,
 		shortURL).Scan(&url)
 	if err != nil {
@@ -105,9 +130,43 @@ func (r *DBRepo) GetLink(shortURL string) (string, bool) {
 	return url, true
 }
 
-func (r *MapRepo) GetLink(shortURL string) (string, bool) {
+func (r *MapRepo) GetLink(ctx context.Context, shortURL string) (string, bool) {
 	val, err := r.data[shortURL]
 	return val.URL, err
+}
+
+func (r *DBRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {
+	rows, err := r.db.Query(ctx,
+		`select s.short_url, s.original_url from shorts s 
+		join user_urls u on s.uuid = u.url_uuid 
+		where u.user_id = $1`,
+		userID)
+	if err != nil {
+		return nil, false
+	}
+	defer rows.Close()
+
+	var urls []models.UserUrlsResponse
+	for rows.Next() {
+		var u models.UserUrlsResponse
+		err := rows.Scan(&u.ShortURL, &u.OriginalURL)
+		if err != nil {
+			return nil, false
+		}
+		urls = append(urls, u)
+	}
+	return urls, true
+}
+
+func (r *MapRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {
+	var urls []models.UserUrlsResponse
+	for k, v := range r.data {
+		urls = append(urls, models.UserUrlsResponse{
+			ShortURL:    k,
+			OriginalURL: v.URL,
+		})
+	}
+	return urls, true
 }
 
 func (r *MapRepo) saveStorage() error {
