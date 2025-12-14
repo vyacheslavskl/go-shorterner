@@ -198,7 +198,9 @@ func (h *ShorterHandler) GetAPIUserUrls(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-
+	for i := range urls {
+		urls[i].ShortURL = h.cfg.RedirectAddress.String() + "/" + urls[i].ShortURL
+	}
 	enc := json.NewEncoder(w)
 	err := enc.Encode(urls)
 	if err != nil {
