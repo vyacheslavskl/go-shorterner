@@ -22,7 +22,7 @@ type URL struct {
 }
 
 type UserURL struct {
-	UrlUuid string `json:"url_uuid"`
+	URLUUID string `json:"url_uuid"`
 	UserID  string `json:"user_id"`
 }
 
@@ -84,7 +84,6 @@ func (r *MapRepo) PutLink(ctx context.Context, url, shortURL, userID string) err
 }
 
 func (r *DBRepo) PutLink(ctx context.Context, url, shortURL, userID string) error {
-	fmt.Println(111111, userID)
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -94,41 +93,35 @@ func (r *DBRepo) PutLink(ctx context.Context, url, shortURL, userID string) erro
 	uuid := uuid.New().String()
 	u := URL{UUID: uuid, ShortURL: shortURL, URL: url}
 
-	var insertedUUID string
-	fmt.Println(2222, insertedUUID)
-	err = r.db.QueryRow(context.Background(),
-		`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)
-		on conflict (short_url) do nothing
-		returning uuid`,
-		u.UUID, u.ShortURL, u.URL).Scan(&insertedUUID)
-	fmt.Println(3333, insertedUUID)
-	if err != nil {
-		fmt.Println(55555, err)
+	_, errShorts := tx.Exec(ctx,
+		`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)`,
+		u.UUID, u.ShortURL, u.URL)
+	if errShorts != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
+		if errors.As(errShorts, &pgErr) {
 			if pgErr.Code == "23505" {
 				return &DuplicateError{ShortURL: shortURL}
 			}
 		}
 	}
-	uu := UserURL{UserID: userID, UrlUuid: insertedUUID}
-	_, err = r.db.Exec(context.Background(),
+
+	uu := UserURL{UserID: userID, URLUUID: uuid}
+	_, errUrls := tx.Exec(ctx,
 		`insert into user_urls (user_id , url_uuid) values ($1, $2)`,
-		uu.UserID, uu.UrlUuid)
-	if err != nil {
-		return fmt.Errorf("failed to insert into user_urls: %w", err)
+		uu.UserID, uu.URLUUID)
+	if errUrls != nil {
+		return fmt.Errorf("failed to insert into user_urls: %w", errUrls)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	fmt.Println(4444, insertedUUID)
 	return nil
 }
 
 func (r *DBRepo) GetLink(ctx context.Context, shortURL string) (string, bool) {
 	var url string
-	err := r.db.QueryRow(context.Background(),
+	err := r.db.QueryRow(ctx,
 		`select original_url from shorts where short_url = $1`,
 		shortURL).Scan(&url)
 	if err != nil {

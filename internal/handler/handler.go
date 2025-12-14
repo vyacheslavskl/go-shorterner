@@ -121,6 +121,7 @@ func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) 
 	resp := models.Response{Result: response}
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
+		h.log.Errorf("error inserting into DB", err)
 		var dupErr *repository.DuplicateError
 		if errors.As(err, &dupErr) {
 			w.WriteHeader(http.StatusConflict)
