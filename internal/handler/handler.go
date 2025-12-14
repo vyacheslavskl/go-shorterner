@@ -183,21 +183,26 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *ShorterHandler) GetAPIUserUrls(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	userID, ok := r.Context().Value(UserIDKey).(string)
 	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	urls, ok := h.srv.GetUserUrls(r.Context(), userID)
-	enc := json.NewEncoder(w)
-	err := enc.Encode(urls)
-	if ok && err != nil {
+	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if len(urls) == 0 {
+	if len(urls) == 0 || urls == nil {
 		w.WriteHeader(http.StatusNoContent)
+		return
 	}
 
+	enc := json.NewEncoder(w)
+	err := enc.Encode(urls)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
