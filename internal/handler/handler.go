@@ -40,6 +40,7 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r.Post("/api/shorten/batch", h.PostAPIShortenBatch)
 	r.Get("/ping", h.Ping)
 	r.Get("/api/user/urls", h.GetAPIUserUrls)
+	r.Delete("/api/user/urls", h.DeleteAPIUserUrls)
 
 	r.NotFound(h.GetRootLink)
 
@@ -207,4 +208,8 @@ func (h *ShorterHandler) GetAPIUserUrls(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *ShorterHandler) DeleteAPIUserUrls(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusAccepted)
 }
