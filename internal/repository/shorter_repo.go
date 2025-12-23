@@ -36,6 +36,7 @@ type Repository interface {
 	Close(ctx context.Context) error
 	PeriodicSave(time.Duration) <-chan error
 	GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool)
+	DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error
 }
 
 type MapRepo struct {
@@ -158,19 +159,26 @@ func (r *DBRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserU
 	return urls, true
 }
 
-// func (r *DBRepo) DeleteUserUrls(ctx context.Context, userID string) error {
-// 	rows, err := r.db.Query(ctx,
-// 		`select s.short_url, s.original_url from shorts s
-// 		join user_urls u on s.uuid = u.url_uuid
-// 		where u.user_id = $1`,
-// 		userID)
-// 	if err != nil {
-// 		return nil, false
-// 	}
-// 	defer rows.Close()
+func (r *DBRepo) DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error {
+	query := `
+		UPDATE user_urls u
+		SET is_deleted = true
+		FROM shorts s
+		WHERE s."uuid" = u.url_uuid 
+		  AND u.user_id = $1
+		  AND s.short_url = ANY($2);`
 
-// 	return nil
-// }
+	_, err := r.db.Exec(ctx, query, userID, shortURLs)
+	if err != nil {
+		return fmt.Errorf("ошибка при массовом обновлении user_urls: %w", err)
+	}
+
+	return nil
+}
+
+func (r *MapRepo) DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error {
+	return nil
+}
 
 func (r *MapRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {
 	var urls []models.UserUrlsResponse

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -216,22 +215,23 @@ func (h *ShorterHandler) DeleteAPIUserUrls(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	_, ok := r.Context().Value(UserIDKey).(string)
+	userID, ok := r.Context().Value(UserIDKey).(string)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	var req []string
+	var shortURLs []string
 	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
+	if err := dec.Decode(&shortURLs); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	fmt.Println(1111, req)
+
+	err := h.srv.DeleteUserUrls(r.Context(), userID, shortURLs)
 
 	enc := json.NewEncoder(w)
-	err := enc.Encode(req)
+	err = enc.Encode(shortURLs)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

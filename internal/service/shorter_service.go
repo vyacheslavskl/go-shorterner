@@ -46,3 +46,7 @@ func (s *ShortServerice) SaveURL(ctx context.Context, u, userID string) (string,
 func (s *ShortServerice) Ping(ctx context.Context) error {
 	return s.repo.Ping(ctx)
 }
+
+func (s *ShortServerice) DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error {
+	return s.repo.DeleteUserUrls(ctx, userID, shortURLs)
+}
