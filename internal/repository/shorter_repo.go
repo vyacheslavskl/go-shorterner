@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 )
 
@@ -44,7 +45,7 @@ type MapRepo struct {
 }
 
 type DBRepo struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
 type DuplicateError struct {
@@ -64,14 +65,13 @@ func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
 	return repo, err
 }
 
-func NewDBRepo(db *pgx.Conn) (*DBRepo, error) {
+func NewDBRepo(db *pgxpool.Pool) (*DBRepo, error) {
 	repo := &DBRepo{}
 	if db != nil {
 		repo.db = db
 	}
 	err := repo.LoadData()
 	return repo, err
-
 }
 
 func (r *MapRepo) PutLink(ctx context.Context, url, shortURL, userID string) error {
@@ -157,6 +157,20 @@ func (r *DBRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserU
 	}
 	return urls, true
 }
+
+// func (r *DBRepo) DeleteUserUrls(ctx context.Context, userID string) error {
+// 	rows, err := r.db.Query(ctx,
+// 		`select s.short_url, s.original_url from shorts s
+// 		join user_urls u on s.uuid = u.url_uuid
+// 		where u.user_id = $1`,
+// 		userID)
+// 	if err != nil {
+// 		return nil, false
+// 	}
+// 	defer rows.Close()
+
+// 	return nil
+// }
 
 func (r *MapRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {
 	var urls []models.UserUrlsResponse
@@ -266,7 +280,8 @@ func (r *MapRepo) Close(ctx context.Context) error {
 }
 
 func (r *DBRepo) Close(ctx context.Context) error {
-	return r.db.Close(ctx)
+	r.db.Close()
+	return nil
 }
 
 func (r *DBRepo) PeriodicSave(interval time.Duration) <-chan error {

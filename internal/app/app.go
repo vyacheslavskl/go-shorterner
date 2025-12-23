@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,7 +16,8 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
@@ -84,24 +84,21 @@ func Run() error {
 		"RedirectAddress", cfg.RedirectAddress.String(),
 		"StoragePath", storagePath,
 	)
-	var conn *pgx.Conn
+	var pool *pgxpool.Pool
 	if dsn != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		conn, err = pgx.Connect(ctx, dsn)
+		pool, err = pgxpool.New(ctx, dsn)
 		if err != nil {
 			sugar.Errorln("Unable to connect to database ", err)
 			return err
 		}
 	} else {
-		conn = nil
+		pool = nil
 	}
 
-	if conn != nil {
-		db, err := sql.Open("postgres", dsn)
-		if err != nil {
-			return err
-		}
+	if pool != nil {
+		db := stdlib.OpenDB(*pool.Config().ConnConfig)
 		driver, err := postgres.WithInstance(db, &postgres.Config{})
 		if err != nil {
 			return err
@@ -127,13 +124,13 @@ func Run() error {
 	}
 
 	var repo repository.Repository
-	if conn != nil {
-		repo, err = repository.NewDBRepo(conn)
+	if pool != nil {
+		repo, err = repository.NewDBRepo(pool)
 		if err != nil {
 			return err
 		}
 	} else {
-		repo, err = repository.NewMapRepo(conn, storagePath)
+		repo, err = repository.NewMapRepo(nil, storagePath)
 		if err != nil {
 			return err
 		}
@@ -165,7 +162,7 @@ func Run() error {
 				return err
 			} else {
 				repo.SaveData()
-				repo.Close(context.Background())
+				repo.Close(shutdownCtx)
 				sugar.Infoln("Graceful shutdown")
 				return nil
 			}
