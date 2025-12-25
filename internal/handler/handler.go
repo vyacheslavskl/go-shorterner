@@ -59,8 +59,17 @@ func (h *ShorterHandler) Ping(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(UserIDKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	fURL := r.URL.Path
-	res, ok := h.srv.GetLink(r.Context(), fURL[1:])
+	res, ok, isDeleted := h.srv.GetLink(r.Context(), fURL[1:], userID)
+	if isDeleted {
+		w.WriteHeader(http.StatusGone)
+		return
+	}
 	if ok && res != "" {
 		w.Header().Add("Location", res)
 		w.WriteHeader(http.StatusTemporaryRedirect)
@@ -229,9 +238,6 @@ func (h *ShorterHandler) DeleteAPIUserUrls(w http.ResponseWriter, r *http.Reques
 	}
 
 	err := h.srv.DeleteUserUrls(r.Context(), userID, shortURLs)
-
-	enc := json.NewEncoder(w)
-	err = enc.Encode(shortURLs)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

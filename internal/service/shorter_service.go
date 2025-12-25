@@ -21,8 +21,8 @@ func (s *ShortServerice) PutLink(ctx context.Context, url, shortURL, userID stri
 	s.repo.PutLink(ctx, url, shortURL, userID)
 }
 
-func (s *ShortServerice) GetLink(ctx context.Context, shortURL string) (string, bool) {
-	return s.repo.GetLink(ctx, shortURL)
+func (s *ShortServerice) GetLink(ctx context.Context, shortURL, userID string) (string, bool, bool) {
+	return s.repo.GetLink(ctx, shortURL, userID)
 }
 
 func (s *ShortServerice) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {

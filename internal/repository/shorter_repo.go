@@ -29,7 +29,7 @@ type UserURL struct {
 
 type Repository interface {
 	PutLink(ctx context.Context, url, shortURL, userID string) error
-	GetLink(ctx context.Context, shortURL string) (string, bool)
+	GetLink(ctx context.Context, shortURL, userID string) (string, bool, bool)
 	LoadData() error
 	SaveData() error
 	Ping(ctx context.Context) error
@@ -120,20 +120,26 @@ func (r *DBRepo) PutLink(ctx context.Context, url, shortURL, userID string) erro
 	return nil
 }
 
-func (r *DBRepo) GetLink(ctx context.Context, shortURL string) (string, bool) {
+func (r *DBRepo) GetLink(ctx context.Context, shortURL, userID string) (string, bool, bool) {
 	var url string
+	var isDeleted bool
 	err := r.db.QueryRow(ctx,
-		`select original_url from shorts where short_url = $1`,
-		shortURL).Scan(&url)
+		`select s.original_url, u.is_deleted from shorts s
+		join user_urls u on s.uuid = u.url_uuid 
+		where short_url = $1 and user_id = $2`,
+		shortURL, userID).Scan(&url, &isDeleted)
 	if err != nil {
-		return "", false
+		return "", false, false
 	}
-	return url, true
+	if isDeleted {
+		return "", true, true // найдена, но удалена
+	}
+	return url, true, false
 }
 
-func (r *MapRepo) GetLink(ctx context.Context, shortURL string) (string, bool) {
+func (r *MapRepo) GetLink(ctx context.Context, shortURL, userID string) (string, bool, bool) {
 	val, err := r.data[shortURL]
-	return val.URL, err
+	return val.URL, err, false
 }
 
 func (r *DBRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {
@@ -170,7 +176,7 @@ func (r *DBRepo) DeleteUserUrls(ctx context.Context, userID string, shortURLs []
 
 	_, err := r.db.Exec(ctx, query, userID, shortURLs)
 	if err != nil {
-		return fmt.Errorf("ошибка при массовом обновлении user_urls: %w", err)
+		return fmt.Errorf("error during delete user_urls: %w", err)
 	}
 
 	return nil

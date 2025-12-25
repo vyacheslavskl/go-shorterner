@@ -17,6 +17,7 @@ type contextKey string
 
 const (
 	UserIDKey contextKey = "user_id"
+	JWTHeader string     = "auth_token"
 )
 
 type (
@@ -166,7 +167,7 @@ func GzipMiddleware(h http.Handler) http.Handler {
 func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie("auth_token")
+			cookie, err := r.Cookie(JWTHeader)
 			var userID string
 
 			if err != nil {
@@ -177,7 +178,7 @@ func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
 					return
 				}
 				http.SetCookie(w, &http.Cookie{
-					Name:     "auth_token",
+					Name:     JWTHeader,
 					Value:    token,
 					Path:     "/",
 					MaxAge:   int(auth.TokenExp / time.Second),
