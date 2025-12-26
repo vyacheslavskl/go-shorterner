@@ -157,7 +157,7 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 	}
 	userID, ok := r.Context().Value(UserIDKey).(string)
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized", http.StatusRequestedRangeNotSatisfiable)
 		return
 	}
 	var req []models.BatchRequest
