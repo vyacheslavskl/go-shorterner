@@ -61,7 +61,7 @@ func (h *ShorterHandler) Ping(w http.ResponseWriter, r *http.Request) {
 func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(UserIDKey).(string)
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized", http.StatusPreconditionFailed)
 		return
 	}
 	fURL := r.URL.Path
