@@ -59,13 +59,14 @@ func (h *ShorterHandler) Ping(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
-	userID, _ := r.Context().Value(UserIDKey).(string)
-	// if !ok {
-	// 	http.Error(w, "Unauthorized", http.StatusPreconditionFailed)
-	// 	return
-	// }
+	userID, ok := r.Context().Value(UserIDKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	fURL := r.URL.Path
 	res, ok, isDeleted := h.srv.GetLink(r.Context(), fURL[1:], userID)
+	h.log.Infof("Result GetLink: %s, %t, %t", res, ok, isDeleted)
 	if isDeleted {
 		w.WriteHeader(http.StatusGone)
 		return

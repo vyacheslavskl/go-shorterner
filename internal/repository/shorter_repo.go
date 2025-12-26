@@ -129,6 +129,15 @@ func (r *DBRepo) GetLink(ctx context.Context, shortURL, userID string) (string, 
 		where short_url = $1 and user_id = $2`,
 		shortURL, userID).Scan(&url, &isDeleted)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			erc := r.db.QueryRow(ctx,
+				`select original_url from shorts where short_url = $1`,
+				shortURL).Scan(&url)
+			if erc != nil {
+				return "", false, false
+			}
+			return url, true, false
+		}
 		return "", false, false
 	}
 	if isDeleted {
