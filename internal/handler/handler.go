@@ -166,7 +166,7 @@ func (h *ShorterHandler) PostAPIShortenBatch(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
+	h.log.Infow("Request", "body", req)
 	var resp []models.BatchResponse
 	for _, req := range req {
 		answer, err := h.srv.SaveURL(r.Context(), req.OriginalURL, userID)
