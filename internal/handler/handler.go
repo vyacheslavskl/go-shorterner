@@ -31,7 +31,7 @@ func (h *ShorterHandler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(GzipMiddleware)
 	r.Use(WithLogging(h.log))
-	r.Use(AuthMiddleware(h.jwt))
+	r.Use(AuthMiddleware(h.jwt, h.log))
 
 	r.Get("/", h.GetRootLink)
 	r.Post("/", h.PostLink)
@@ -65,7 +65,6 @@ func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fURL := r.URL.Path
-	h.log.Infow("UserId", "user", userID)
 	res, ok, isDeleted := h.srv.GetLink(r.Context(), fURL[1:], userID)
 	if isDeleted {
 		w.WriteHeader(http.StatusGone)

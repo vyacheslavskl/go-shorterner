@@ -164,7 +164,7 @@ func GzipMiddleware(h http.Handler) http.Handler {
 	})
 }
 
-func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
+func AuthMiddleware(jwt *auth.JWTService, logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie(JWTHeader)
@@ -187,6 +187,8 @@ func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
 					SameSite: http.SameSiteStrictMode,
 				})
 
+				logger.Infow("new user", "user_id", userID)
+
 				ctx := context.WithValue(r.Context(), UserIDKey, userID)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
@@ -197,6 +199,7 @@ func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
 				http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
 				return
 			}
+			logger.Infow("existing user", "user_id", userID)
 
 			ctx := context.WithValue(r.Context(), UserIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
