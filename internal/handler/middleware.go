@@ -194,7 +194,7 @@ func AuthMiddleware(jwt *auth.JWTService) func(http.Handler) http.Handler {
 
 			userID, err = jwt.GetUserID(cookie.Value)
 			if err != nil {
-				http.Error(w, "Unauthorized: invalid token", http.StatusPreconditionRequired)
+				http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
 				return
 			}
 
