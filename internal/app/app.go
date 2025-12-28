@@ -27,6 +27,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const taskSize = 1000
+
 func Run() error {
 	log := zap.NewDevelopmentConfig()
 	log.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
@@ -137,7 +139,18 @@ func Run() error {
 	}
 
 	srv := service.NewService(repo)
-	handler := handler.NewShorterHandler(cfg, srv, sugar, jwtService)
+
+	deleteTaskCh := make(chan handler.DeleteTask, taskSize)
+	go func() {
+		for task := range deleteTaskCh {
+			if err := srv.DeleteUserUrls(task.Context, task.UserID, task.ShortUrls); err != nil {
+				sugar.Warnw("delete failed", "error", err, "userID", task.UserID)
+			}
+		}
+		sugar.Infow("Delete worker stopped")
+	}()
+
+	handler := handler.NewShorterHandler(cfg, srv, sugar, jwtService, deleteTaskCh)
 
 	server := &http.Server{
 		Addr:    cfg.Address.String(),
@@ -161,6 +174,7 @@ func Run() error {
 			if err := server.Shutdown(shutdownCtx); err != nil {
 				return err
 			} else {
+				close(deleteTaskCh)
 				repo.SaveData()
 				repo.Close(shutdownCtx)
 				sugar.Infoln("Graceful shutdown")

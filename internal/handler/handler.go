@@ -16,15 +16,22 @@ import (
 	"go.uber.org/zap"
 )
 
-type ShorterHandler struct {
-	cfg *config.Config
-	srv *service.ShortServerice
-	log *zap.SugaredLogger
-	jwt *auth.JWTService
+type DeleteTask struct {
+	UserID    string
+	ShortUrls []string
+	Context   context.Context
 }
 
-func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap.SugaredLogger, jwt *auth.JWTService) *ShorterHandler {
-	return &ShorterHandler{cfg: cfg, srv: srv, log: log, jwt: jwt}
+type ShorterHandler struct {
+	cfg   *config.Config
+	srv   *service.ShortServerice
+	log   *zap.SugaredLogger
+	jwt   *auth.JWTService
+	delCh chan<- DeleteTask
+}
+
+func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap.SugaredLogger, jwt *auth.JWTService, delCh chan<- DeleteTask) *ShorterHandler {
+	return &ShorterHandler{cfg: cfg, srv: srv, log: log, jwt: jwt, delCh: delCh}
 }
 
 func (h *ShorterHandler) Routes() http.Handler {
@@ -238,11 +245,18 @@ func (h *ShorterHandler) DeleteAPIUserUrls(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := h.srv.DeleteUserUrls(r.Context(), userID, shortURLs)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	task := DeleteTask{
+		UserID:    userID,
+		ShortUrls: shortURLs,
+		Context:   context.TODO(),
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	select {
+	case h.delCh <- task:
+		h.log.Infof("Delete task added for user %s, %v keys", userID, shortURLs)
+		w.WriteHeader(http.StatusAccepted)
+	default:
+		h.log.Warnw("Task default delete request", "userID", userID)
+		http.Error(w, "Too many requests", http.StatusInternalServerError)
+	}
 }

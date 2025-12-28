@@ -63,10 +63,10 @@ func TestHander(t *testing.T) {
 	}
 
 	cfg := new(config.Config)
-	// con := &pgx.Conn{}
 	repo, _ := repository.NewMapRepo(nil, "")
 	srv := service.NewService(repo)
 	logger, e := zap.NewDevelopment()
+	deleteTaskCh := make(chan DeleteTask, 10)
 	if e != nil {
 		panic(e)
 	}
@@ -75,7 +75,7 @@ func TestHander(t *testing.T) {
 	defer logger.Sync()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := NewShorterHandler(cfg, srv, sugar, jwt).Routes()
+			handler := NewShorterHandler(cfg, srv, sugar, jwt, deleteTaskCh).Routes()
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()

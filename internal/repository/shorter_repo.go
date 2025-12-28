@@ -187,7 +187,6 @@ func (r *DBRepo) DeleteUserUrls(ctx context.Context, userID string, shortURLs []
 	if err != nil {
 		return fmt.Errorf("error during delete user_urls: %w", err)
 	}
-
 	return nil
 }
 
