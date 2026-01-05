@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 	"go.uber.org/zap"
@@ -140,15 +142,11 @@ func Run() error {
 
 	srv := service.NewService(repo)
 
-	deleteTaskCh := make(chan handler.DeleteTask, taskSize)
-	go func() {
-		for task := range deleteTaskCh {
-			if err := srv.DeleteUserUrls(task.Context, task.UserID, task.ShortUrls); err != nil {
-				sugar.Warnw("delete failed", "error", err, "userID", task.UserID)
-			}
-		}
-		sugar.Infow("Delete worker stopped")
-	}()
+	deleteTaskCh := make(chan models.DeleteTask, taskSize)
+	ctxC, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	multiplexedDeleteCh := fanIn(ctxC, deleteTaskCh)
+	go deleteWorker(ctxC, multiplexedDeleteCh, srv, sugar)
 
 	handler := handler.NewShorterHandler(cfg, srv, sugar, jwtService, deleteTaskCh)
 
@@ -170,6 +168,7 @@ func Run() error {
 	for {
 		select {
 		case <-stop:
+			cancel()
 			shutdownCtx := context.Background()
 			if err := server.Shutdown(shutdownCtx); err != nil {
 				return err
@@ -188,4 +187,39 @@ func Run() error {
 			return err
 		}
 	}
+}
+
+func fanIn(ctx context.Context, channels ...<-chan models.DeleteTask) <-chan models.DeleteTask {
+	var wg sync.WaitGroup
+	outCh := make(chan models.DeleteTask)
+
+	for _, ch := range channels {
+		wg.Add(1)
+		go func(c <-chan models.DeleteTask) {
+			defer wg.Done()
+			for task := range c {
+				select {
+				case outCh <- task:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(ch)
+	}
+
+	go func() {
+		wg.Wait()
+		close(outCh)
+	}()
+
+	return outCh
+}
+
+func deleteWorker(ctx context.Context, deleteTaskCh <-chan models.DeleteTask, srv *service.ShortServerice, sugar *zap.SugaredLogger) {
+	for task := range deleteTaskCh {
+		if err := srv.DeleteUserUrls(task.Context, task.UserID, task.ShortUrls); err != nil {
+			sugar.Warnw("delete failed", "error", err, "userID", task.UserID)
+		}
+	}
+	sugar.Infow("Delete worker stopped")
 }

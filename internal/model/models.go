@@ -1,5 +1,7 @@
 package models
 
+import "context"
+
 type (
 	Request struct {
 		URL string `json:"url"`
@@ -20,3 +22,9 @@ type (
 		OriginalURL string `json:"original_url"`
 	}
 )
+
+type DeleteTask struct {
+	UserID    string
+	ShortUrls []string
+	Context   context.Context
+}

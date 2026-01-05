@@ -16,21 +16,15 @@ import (
 	"go.uber.org/zap"
 )
 
-type DeleteTask struct {
-	UserID    string
-	ShortUrls []string
-	Context   context.Context
-}
-
 type ShorterHandler struct {
 	cfg   *config.Config
 	srv   *service.ShortServerice
 	log   *zap.SugaredLogger
 	jwt   *auth.JWTService
-	delCh chan<- DeleteTask
+	delCh chan<- models.DeleteTask
 }
 
-func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap.SugaredLogger, jwt *auth.JWTService, delCh chan<- DeleteTask) *ShorterHandler {
+func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap.SugaredLogger, jwt *auth.JWTService, delCh chan<- models.DeleteTask) *ShorterHandler {
 	return &ShorterHandler{cfg: cfg, srv: srv, log: log, jwt: jwt, delCh: delCh}
 }
 
@@ -245,10 +239,10 @@ func (h *ShorterHandler) DeleteAPIUserUrls(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	task := DeleteTask{
+	task := models.DeleteTask{
 		UserID:    userID,
 		ShortUrls: shortURLs,
-		Context:   context.TODO(),
+		Context:   context.Background(),
 	}
 
 	select {

@@ -191,6 +191,20 @@ func (r *DBRepo) DeleteUserUrls(ctx context.Context, userID string, shortURLs []
 }
 
 func (r *MapRepo) DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, shortURL := range shortURLs {
+		var keyToDelete string
+		for key, link := range r.data {
+			if link.ShortURL == shortURL {
+				keyToDelete = key
+				break
+			}
+		}
+		if keyToDelete != "" {
+			delete(r.data, keyToDelete)
+		}
+	}
 	return nil
 }
 

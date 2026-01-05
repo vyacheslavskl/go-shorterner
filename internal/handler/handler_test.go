@@ -9,6 +9,7 @@ import (
 
 	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 	"go.uber.org/zap"
@@ -66,7 +67,7 @@ func TestHander(t *testing.T) {
 	repo, _ := repository.NewMapRepo(nil, "")
 	srv := service.NewService(repo)
 	logger, e := zap.NewDevelopment()
-	deleteTaskCh := make(chan DeleteTask, 10)
+	deleteTaskCh := make(chan models.DeleteTask, 10)
 	if e != nil {
 		panic(e)
 	}
