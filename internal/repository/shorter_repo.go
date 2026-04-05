@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 )
 
 type URL struct {
@@ -20,14 +22,21 @@ type URL struct {
 	URL      string `json:"original_url"`
 }
 
+type UserURL struct {
+	URLUUID string `json:"url_uuid"`
+	UserID  string `json:"user_id"`
+}
+
 type Repository interface {
-	PutLink(url, shortURL string) error
-	GetLink(shortURL string) (string, bool)
+	PutLink(ctx context.Context, url, shortURL, userID string) error
+	GetLink(ctx context.Context, shortURL, userID string) (string, bool, bool)
 	LoadData() error
 	SaveData() error
 	Ping(ctx context.Context) error
 	Close(ctx context.Context) error
 	PeriodicSave(time.Duration) <-chan error
+	GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool)
+	DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error
 }
 
 type MapRepo struct {
@@ -37,7 +46,7 @@ type MapRepo struct {
 }
 
 type DBRepo struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
 type DuplicateError struct {
@@ -57,17 +66,16 @@ func NewMapRepo(db *pgx.Conn, storagePath string) (*MapRepo, error) {
 	return repo, err
 }
 
-func NewDBRepo(db *pgx.Conn) (*DBRepo, error) {
+func NewDBRepo(db *pgxpool.Pool) (*DBRepo, error) {
 	repo := &DBRepo{}
 	if db != nil {
 		repo.db = db
 	}
 	err := repo.LoadData()
 	return repo, err
-
 }
 
-func (r *MapRepo) PutLink(url, shortURL string) error {
+func (r *MapRepo) PutLink(ctx context.Context, url, shortURL, userID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	uuid := uuid.New().String()
@@ -76,38 +84,139 @@ func (r *MapRepo) PutLink(url, shortURL string) error {
 	return nil
 }
 
-func (r *DBRepo) PutLink(url, shortURL string) error {
+func (r *DBRepo) PutLink(ctx context.Context, url, shortURL, userID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	uuid := uuid.New().String()
 	u := URL{UUID: uuid, ShortURL: shortURL, URL: url}
 
-	_, err := r.db.Exec(context.Background(),
+	_, errShorts := tx.Exec(ctx,
 		`insert into shorts (uuid, short_url, original_url) values ($1, $2, $3)`,
 		u.UUID, u.ShortURL, u.URL)
-	if err != nil {
+	if errShorts != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
+		if errors.As(errShorts, &pgErr) {
 			if pgErr.Code == "23505" {
 				return &DuplicateError{ShortURL: shortURL}
 			}
 		}
 	}
+
+	uu := UserURL{UserID: userID, URLUUID: uuid}
+	_, errUrls := tx.Exec(ctx,
+		`insert into user_urls (user_id , url_uuid) values ($1, $2)`,
+		uu.UserID, uu.URLUUID)
+	if errUrls != nil {
+		return fmt.Errorf("failed to insert into user_urls: %w", errUrls)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return nil
 }
 
-func (r *DBRepo) GetLink(shortURL string) (string, bool) {
+func (r *DBRepo) GetLink(ctx context.Context, shortURL, userID string) (string, bool, bool) {
 	var url string
-	err := r.db.QueryRow(context.Background(),
-		`select original_url from shorts where short_url = $1`,
-		shortURL).Scan(&url)
+	var isDeleted bool
+	err := r.db.QueryRow(ctx,
+		`select s.original_url, u.is_deleted from shorts s
+		join user_urls u on s.uuid = u.url_uuid 
+		where short_url = $1 and user_id = $2`,
+		shortURL, userID).Scan(&url, &isDeleted)
 	if err != nil {
-		return "", false
+		if errors.Is(err, pgx.ErrNoRows) {
+			erc := r.db.QueryRow(ctx,
+				`select original_url from shorts where short_url = $1`,
+				shortURL).Scan(&url)
+			if erc != nil {
+				return "", false, false
+			}
+			return url, true, false
+		}
+		return "", false, false
 	}
-	return url, true
+	if isDeleted {
+		return "", true, true // найдена, но удалена
+	}
+	return url, true, false
 }
 
-func (r *MapRepo) GetLink(shortURL string) (string, bool) {
+func (r *MapRepo) GetLink(ctx context.Context, shortURL, userID string) (string, bool, bool) {
 	val, err := r.data[shortURL]
-	return val.URL, err
+	return val.URL, err, false
+}
+
+func (r *DBRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {
+	rows, err := r.db.Query(ctx,
+		`select s.short_url, s.original_url from shorts s 
+		join user_urls u on s.uuid = u.url_uuid 
+		where u.user_id = $1`,
+		userID)
+	if err != nil {
+		return nil, false
+	}
+	defer rows.Close()
+
+	var urls []models.UserUrlsResponse
+	for rows.Next() {
+		var u models.UserUrlsResponse
+		err := rows.Scan(&u.ShortURL, &u.OriginalURL)
+		if err != nil {
+			return nil, false
+		}
+		urls = append(urls, u)
+	}
+	return urls, true
+}
+
+func (r *DBRepo) DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error {
+	query := `
+		UPDATE user_urls u
+		SET is_deleted = true
+		FROM shorts s
+		WHERE s."uuid" = u.url_uuid 
+		  AND u.user_id = $1
+		  AND s.short_url = ANY($2);`
+
+	_, err := r.db.Exec(ctx, query, userID, shortURLs)
+	if err != nil {
+		return fmt.Errorf("error during delete user_urls: %w", err)
+	}
+	return nil
+}
+
+func (r *MapRepo) DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, shortURL := range shortURLs {
+		var keyToDelete string
+		for key, link := range r.data {
+			if link.ShortURL == shortURL {
+				keyToDelete = key
+				break
+			}
+		}
+		if keyToDelete != "" {
+			delete(r.data, keyToDelete)
+		}
+	}
+	return nil
+}
+
+func (r *MapRepo) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {
+	var urls []models.UserUrlsResponse
+	for k, v := range r.data {
+		urls = append(urls, models.UserUrlsResponse{
+			ShortURL:    k,
+			OriginalURL: v.URL,
+		})
+	}
+	return urls, true
 }
 
 func (r *MapRepo) saveStorage() error {
@@ -207,7 +316,8 @@ func (r *MapRepo) Close(ctx context.Context) error {
 }
 
 func (r *DBRepo) Close(ctx context.Context) error {
-	return r.db.Close(ctx)
+	r.db.Close()
+	return nil
 }
 
 func (r *DBRepo) PeriodicSave(interval time.Duration) <-chan error {

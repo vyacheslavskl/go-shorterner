@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 	"go.uber.org/zap"
@@ -62,18 +64,19 @@ func TestHander(t *testing.T) {
 	}
 
 	cfg := new(config.Config)
-	// con := &pgx.Conn{}
 	repo, _ := repository.NewMapRepo(nil, "")
 	srv := service.NewService(repo)
 	logger, e := zap.NewDevelopment()
+	deleteTaskCh := make(chan models.DeleteTask, 10)
 	if e != nil {
 		panic(e)
 	}
 	sugar := logger.Sugar()
+	jwt := auth.NewJWTService([]byte("super_test_key"))
 	defer logger.Sync()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := NewShorterHandler(cfg, srv, sugar).Routes()
+			handler := NewShorterHandler(cfg, srv, sugar, jwt, deleteTaskCh).Routes()
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()

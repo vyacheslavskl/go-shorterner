@@ -2,12 +2,22 @@ package handler
 
 import (
 	"compress/gzip"
+	"context"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"go.uber.org/zap"
+)
+
+type contextKey string
+
+const (
+	UserIDKey contextKey = "user_id"
+	JWTHeader string     = "auth_token"
 )
 
 type (
@@ -152,4 +162,47 @@ func GzipMiddleware(h http.Handler) http.Handler {
 
 		h.ServeHTTP(ow, r)
 	})
+}
+
+func AuthMiddleware(jwt *auth.JWTService, logger *zap.SugaredLogger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie(JWTHeader)
+			var userID string
+
+			if err != nil {
+				userID = uuid.New().String()
+				token, err := jwt.GenerateToken(userID)
+				if err != nil {
+					http.Error(w, "Internal error", http.StatusInternalServerError)
+					return
+				}
+				http.SetCookie(w, &http.Cookie{
+					Name:     JWTHeader,
+					Value:    token,
+					Path:     "/",
+					MaxAge:   int(auth.TokenExp / time.Second),
+					HttpOnly: true,
+					Secure:   false,
+					SameSite: http.SameSiteStrictMode,
+				})
+
+				logger.Infow("new user", "user_id", userID)
+
+				ctx := context.WithValue(r.Context(), UserIDKey, userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			userID, err = jwt.GetUserID(cookie.Value)
+			if err != nil {
+				http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
+				return
+			}
+			logger.Infow("existing user", "user_id", userID)
+
+			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }

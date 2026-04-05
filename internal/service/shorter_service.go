@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 )
 
@@ -16,12 +17,16 @@ func NewService(repo repository.Repository) *ShortServerice {
 	return &ShortServerice{repo: repo}
 }
 
-func (s *ShortServerice) PutLink(url, shortURL string) {
-	s.repo.PutLink(url, shortURL)
+func (s *ShortServerice) PutLink(ctx context.Context, url, shortURL, userID string) {
+	s.repo.PutLink(ctx, url, shortURL, userID)
 }
 
-func (s *ShortServerice) GetLink(shortURL string) (string, bool) {
-	return s.repo.GetLink(shortURL)
+func (s *ShortServerice) GetLink(ctx context.Context, shortURL, userID string) (string, bool, bool) {
+	return s.repo.GetLink(ctx, shortURL, userID)
+}
+
+func (s *ShortServerice) GetUserUrls(ctx context.Context, userID string) ([]models.UserUrlsResponse, bool) {
+	return s.repo.GetUserUrls(ctx, userID)
 }
 
 func generateShort(url string) string {
@@ -31,13 +36,17 @@ func generateShort(url string) string {
 	return result[:8] // Берем первые 8 символов
 }
 
-func (s *ShortServerice) SaveURL(u string) (string, error) {
+func (s *ShortServerice) SaveURL(ctx context.Context, u, userID string) (string, error) {
 	resultHash := generateShort(u)
-	err := s.repo.PutLink(u, resultHash)
+	err := s.repo.PutLink(ctx, u, resultHash, userID)
 
 	return resultHash, err
 }
 
 func (s *ShortServerice) Ping(ctx context.Context) error {
 	return s.repo.Ping(ctx)
+}
+
+func (s *ShortServerice) DeleteUserUrls(ctx context.Context, userID string, shortURLs []string) error {
+	return s.repo.DeleteUserUrls(ctx, userID, shortURLs)
 }

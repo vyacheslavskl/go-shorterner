@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,20 +10,26 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
+	models "github.com/vyacheslavskl/go-shorterner/internal/model"
 	"github.com/vyacheslavskl/go-shorterner/internal/repository"
 	"github.com/vyacheslavskl/go-shorterner/internal/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+const taskSize = 1000
 
 func Run() error {
 	log := zap.NewDevelopmentConfig()
@@ -67,10 +72,11 @@ func Run() error {
 		flag.StringVar(&dsn, "d", "", "dsn for Postgres")
 	}
 
-	// fullPath := os.Getenv("MIGRATIONS_PATH")
-	// if fullPath == "" {
-	// 	flag.StringVar(&fullPath, "m", "/migrations", "migration path")
-	// }
+	jwt := os.Getenv("JWT_KEY")
+	if jwt == "" {
+		jwt = "secret_temp_key"
+	}
+	jwtService := auth.NewJWTService([]byte(jwt))
 
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
@@ -82,24 +88,21 @@ func Run() error {
 		"RedirectAddress", cfg.RedirectAddress.String(),
 		"StoragePath", storagePath,
 	)
-	var conn *pgx.Conn
+	var pool *pgxpool.Pool
 	if dsn != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		conn, err = pgx.Connect(ctx, dsn)
+		pool, err = pgxpool.New(ctx, dsn)
 		if err != nil {
 			sugar.Errorln("Unable to connect to database ", err)
 			return err
 		}
 	} else {
-		conn = nil
+		pool = nil
 	}
 
-	if conn != nil {
-		db, err := sql.Open("postgres", dsn)
-		if err != nil {
-			return err
-		}
+	if pool != nil {
+		db := stdlib.OpenDB(*pool.Config().ConnConfig)
 		driver, err := postgres.WithInstance(db, &postgres.Config{})
 		if err != nil {
 			return err
@@ -125,20 +128,27 @@ func Run() error {
 	}
 
 	var repo repository.Repository
-	if conn != nil {
-		repo, err = repository.NewDBRepo(conn)
+	if pool != nil {
+		repo, err = repository.NewDBRepo(pool)
 		if err != nil {
 			return err
 		}
 	} else {
-		repo, err = repository.NewMapRepo(conn, storagePath)
+		repo, err = repository.NewMapRepo(nil, storagePath)
 		if err != nil {
 			return err
 		}
 	}
 
 	srv := service.NewService(repo)
-	handler := handler.NewShorterHandler(cfg, srv, sugar)
+
+	deleteTaskCh := make(chan models.DeleteTask, taskSize)
+	ctxC, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	multiplexedDeleteCh := fanIn(ctxC, deleteTaskCh)
+	go deleteWorker(ctxC, multiplexedDeleteCh, srv, sugar)
+
+	handler := handler.NewShorterHandler(cfg, srv, sugar, jwtService, deleteTaskCh)
 
 	server := &http.Server{
 		Addr:    cfg.Address.String(),
@@ -158,12 +168,14 @@ func Run() error {
 	for {
 		select {
 		case <-stop:
+			cancel()
 			shutdownCtx := context.Background()
 			if err := server.Shutdown(shutdownCtx); err != nil {
 				return err
 			} else {
+				close(deleteTaskCh)
 				repo.SaveData()
-				repo.Close(context.Background())
+				repo.Close(shutdownCtx)
 				sugar.Infoln("Graceful shutdown")
 				return nil
 			}
@@ -175,4 +187,39 @@ func Run() error {
 			return err
 		}
 	}
+}
+
+func fanIn(ctx context.Context, channels ...<-chan models.DeleteTask) <-chan models.DeleteTask {
+	var wg sync.WaitGroup
+	outCh := make(chan models.DeleteTask)
+
+	for _, ch := range channels {
+		wg.Add(1)
+		go func(c <-chan models.DeleteTask) {
+			defer wg.Done()
+			for task := range c {
+				select {
+				case outCh <- task:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(ch)
+	}
+
+	go func() {
+		wg.Wait()
+		close(outCh)
+	}()
+
+	return outCh
+}
+
+func deleteWorker(ctx context.Context, deleteTaskCh <-chan models.DeleteTask, srv *service.ShortServerice, sugar *zap.SugaredLogger) {
+	for task := range deleteTaskCh {
+		if err := srv.DeleteUserUrls(task.Context, task.UserID, task.ShortUrls); err != nil {
+			sugar.Warnw("delete failed", "error", err, "userID", task.UserID)
+		}
+	}
+	sugar.Infow("Delete worker stopped")
 }
