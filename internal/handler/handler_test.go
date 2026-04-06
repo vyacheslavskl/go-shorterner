@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vyacheslavskl/go-shorterner/internal/audit"
 	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	models "github.com/vyacheslavskl/go-shorterner/internal/model"
@@ -66,6 +67,7 @@ func TestHander(t *testing.T) {
 	cfg := new(config.Config)
 	repo, _ := repository.NewMapRepo(nil, "")
 	srv := service.NewService(repo)
+	auditPub := audit.NewPublisher()
 	logger, e := zap.NewDevelopment()
 	deleteTaskCh := make(chan models.DeleteTask, 10)
 	if e != nil {
@@ -76,7 +78,7 @@ func TestHander(t *testing.T) {
 	defer logger.Sync()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := NewShorterHandler(cfg, srv, sugar, jwt, deleteTaskCh).Routes()
+			handler := NewShorterHandler(cfg, srv, sugar, jwt, deleteTaskCh, auditPub).Routes()
 			r := httptest.NewRequest(tc.method, tc.url, tc.body)
 			r.Header.Add("Content-Type", tc.contentType)
 			w := httptest.NewRecorder()
