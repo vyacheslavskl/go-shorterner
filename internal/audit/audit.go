@@ -81,11 +81,17 @@ func NewHTTPObserver(url string) *HTTPObserver {
 }
 
 func (h *HTTPObserver) OnEvent(ctx context.Context, e models.AuditEvent) error {
-	body, _ := json.Marshal(e)
+	body, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, h.url, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.url, bytes.NewBuffer(body))
+	if err != nil {
+		return err // важно: вернуть ошибку, а не игнорировать
+	}
 	req.Header.Set("Content-Type", "application/json")
 
-	_, err := h.client.Do(req)
+	_, err = h.client.Do(req)
 	return err
 }
