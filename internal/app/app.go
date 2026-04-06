@@ -19,6 +19,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/vyacheslavskl/go-shorterner/internal/audit"
 	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	"github.com/vyacheslavskl/go-shorterner/internal/handler"
@@ -32,8 +33,11 @@ import (
 const taskSize = 1000
 
 func Run() error {
-	log := zap.NewDevelopmentConfig()
+	log := zap.NewProductionConfig()
 	log.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
+	log.EncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+		enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.0000000Z"))
+	}
 	logger, err := log.Build()
 	if err != nil {
 		return err
@@ -77,6 +81,15 @@ func Run() error {
 		jwt = "secret_temp_key"
 	}
 	jwtService := auth.NewJWTService([]byte(jwt))
+
+	auditFile := os.Getenv("AUDIT_FILE")
+	if auditFile == "" {
+		flag.StringVar(&auditFile, "audit-file", "", "path to storage audit file")
+	}
+	auditURL := os.Getenv("AUDIT_URL")
+	if auditURL == "" {
+		flag.StringVar(&auditURL, "audit-url", "", "path to send audit urls")
+	}
 
 	flag.Var(&addr.Address, "a", "Net address host:port")
 	flag.Var(&addr.RedirectAddress, "b", "Net address host:port")
@@ -148,7 +161,22 @@ func Run() error {
 	multiplexedDeleteCh := fanIn(ctxC, deleteTaskCh)
 	go deleteWorker(ctxC, multiplexedDeleteCh, srv, sugar)
 
-	handler := handler.NewShorterHandler(cfg, srv, sugar, jwtService, deleteTaskCh)
+	auditPub := audit.NewPublisher()
+	if auditFile != "" {
+		fileObs, err := audit.NewFileObserver(auditFile)
+		if err != nil {
+			return err
+		}
+		auditPub.Subscribe(fileObs)
+		sugar.Infof("audit file created path %s", auditFile)
+	}
+	if auditURL != "" {
+		httpObs := audit.NewHTTPObserver(auditURL)
+		auditPub.Subscribe(httpObs)
+		sugar.Infof("http audit created URL %s", httpObs)
+	}
+
+	handler := handler.NewShorterHandler(cfg, srv, sugar, jwtService, deleteTaskCh, auditPub)
 
 	server := &http.Server{
 		Addr:    cfg.Address.String(),

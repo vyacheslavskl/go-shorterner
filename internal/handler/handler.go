@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/vyacheslavskl/go-shorterner/internal/audit"
 	"github.com/vyacheslavskl/go-shorterner/internal/auth"
 	"github.com/vyacheslavskl/go-shorterner/internal/config"
 	models "github.com/vyacheslavskl/go-shorterner/internal/model"
@@ -22,10 +24,11 @@ type ShorterHandler struct {
 	log   *zap.SugaredLogger
 	jwt   *auth.JWTService
 	delCh chan<- models.DeleteTask
+	audit *audit.Publisher
 }
 
-func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap.SugaredLogger, jwt *auth.JWTService, delCh chan<- models.DeleteTask) *ShorterHandler {
-	return &ShorterHandler{cfg: cfg, srv: srv, log: log, jwt: jwt, delCh: delCh}
+func NewShorterHandler(cfg *config.Config, srv *service.ShortServerice, log *zap.SugaredLogger, jwt *auth.JWTService, delCh chan<- models.DeleteTask, audit *audit.Publisher) *ShorterHandler {
+	return &ShorterHandler{cfg: cfg, srv: srv, log: log, jwt: jwt, delCh: delCh, audit: audit}
 }
 
 func (h *ShorterHandler) Routes() http.Handler {
@@ -60,14 +63,24 @@ func (h *ShorterHandler) Ping(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value(UserIDKey).(string)
+	ctx := r.Context()
+	userID, ok := ctx.Value(UserIDKey).(string)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 	fURL := r.URL.Path
-	res, ok, isDeleted := h.srv.GetLink(r.Context(), fURL[1:], userID)
+	res, ok, isDeleted := h.srv.GetLink(ctx, fURL[1:], userID)
 	h.log.Infof("Result GetLink: %s, %t, %t", res, ok, isDeleted)
+
+	// Log audit
+	auditEvent := models.AuditEvent{
+		TS:     time.Now().Unix(),
+		Action: audit.AuditActionFollow,
+		UserID: userID,
+		URL:    res}
+	h.audit.Notify(ctx, auditEvent)
+
 	if isDeleted {
 		w.WriteHeader(http.StatusGone)
 		return
@@ -81,7 +94,8 @@ func (h *ShorterHandler) GetLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value(UserIDKey).(string)
+	ctx := r.Context()
+	userID, ok := ctx.Value(UserIDKey).(string)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -94,6 +108,14 @@ func (h *ShorterHandler) PostLink(w http.ResponseWriter, r *http.Request) {
 
 	shortURL, err := h.srv.SaveURL(context.Background(), string(url), userID)
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
+
+	// Log audit
+	auditEvent := models.AuditEvent{
+		TS:     time.Now().Unix(),
+		Action: audit.AuditActionShorten,
+		UserID: userID,
+		URL:    string(url)}
+	h.audit.Notify(ctx, auditEvent)
 
 	w.Header().Set("Content-Type", "text/plain")
 	if err != nil {
@@ -115,7 +137,8 @@ func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	userID, ok := r.Context().Value(UserIDKey).(string)
+	ctx := r.Context()
+	userID, ok := ctx.Value(UserIDKey).(string)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -128,9 +151,18 @@ func (h *ShorterHandler) PostAPIShorten(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	shortURL, err := h.srv.SaveURL(r.Context(), req.URL, userID)
+	shortURL, err := h.srv.SaveURL(ctx, req.URL, userID)
 	response := h.cfg.RedirectAddress.String() + "/" + shortURL
 	resp := models.Response{Result: response}
+
+	// Log audit
+	auditEvent := models.AuditEvent{
+		TS:     time.Now().Unix(),
+		Action: audit.AuditActionShorten,
+		UserID: userID,
+		URL:    req.URL}
+	h.audit.Notify(ctx, auditEvent)
+
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		h.log.Errorf("error inserting into DB", err)
